@@ -68,10 +68,12 @@
 #include <ompl/geometric/planners/prm/LazyPRMstar.h>
 #include <ompl/geometric/planners/prm/SPARS.h>
 #include <ompl/geometric/planners/prm/SPARStwo.h>
+#include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
 #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
+#include <moveit/ompl_interface/detail/ompl_constraint.h>
 
 using namespace std::placeholders;
 
@@ -311,7 +313,7 @@ void ompl_interface::PlanningContextManager::setPlannerConfigurations(
 
 ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextManager::getPlanningContext(
     const planning_interface::PlannerConfigurationSettings& config,
-    const StateSpaceFactoryTypeSelector& factory_selector, const moveit_msgs::MotionPlanRequest& /*req*/) const
+    const StateSpaceFactoryTypeSelector& factory_selector, const moveit_msgs::MotionPlanRequest& req) const
 {
   const ompl_interface::ModelBasedStateSpaceFactoryPtr& factory = factory_selector(config.group);
 
@@ -343,8 +345,30 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     context_spec.constraint_sampler_manager_ = constraint_sampler_manager_;
     context_spec.state_space_ = factory->getNewStateSpace(space_spec);
 
+    // Create a specific child of ob::Constraint for the constraint state space
+    // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
+    auto ompl_constraint = std::make_shared<XPositionConstraint>(
+        robot_model_, config.group, robot_model_->getJointModelGroup(config.group)->getVariableCount());
+    ompl_constraint->init(req.path_constraints);
+
+    context_spec.constrained_state_space_ =
+        std::make_shared<ob::ProjectedStateSpace>(context_spec.state_space_, ompl_constraint);
+    context_spec.constrained_space_info_ =
+        std::make_shared<ob::ConstrainedSpaceInformation>(context_spec.constrained_state_space_);
+
     // Choose the correct simple setup type to load
-    context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
+    // context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
+    context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.constrained_space_info_));
+
+    try
+    {
+      // context_spec.state_space_->sanityChecks();
+      context_spec.constrained_state_space_->sanityChecks();
+    }
+    catch (ompl::Exception& ex)
+    {
+      ROS_ERROR_NAMED("planning_context_manager", "OMPL sanity check encountered an error: %s", ex.what());
+    }
 
     bool state_validity_cache = true;
     if (config.config.find("subspaces") != config.config.end())
@@ -522,6 +546,8 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
       context.reset();
     }
   }
+
+  context->setCheckPathConstraints(false);
 
   return context;
 }

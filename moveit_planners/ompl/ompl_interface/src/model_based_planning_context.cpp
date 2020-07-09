@@ -116,7 +116,7 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
   // convert the input state to the corresponding OMPL state
   ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
   spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
-  ompl_simple_setup_->setStartState(ompl_start_state);
+  ompl_simple_setup_->setStartState(ompl_start_state);  /* This is where I get a Segmentation fault. */
   ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
 
   if (path_constraints_ && constraints_library_)
@@ -452,6 +452,12 @@ bool ompl_interface::ModelBasedPlanningContext::getSolutionPath(robot_trajectory
   if (ompl_simple_setup_->haveSolutionPath())
     convertPath(ompl_simple_setup_->getSolutionPath(), traj);
   return ompl_simple_setup_->haveSolutionPath();
+}
+
+void ompl_interface::ModelBasedPlanningContext::setCheckPathConstraints(bool flag)
+{
+  if (ompl_simple_setup_->getStateValidityChecker())
+    static_cast<StateValidityChecker*>(ompl_simple_setup_->getStateValidityChecker().get())->setCheckPathConstraints(flag);
 }
 
 void ompl_interface::ModelBasedPlanningContext::setVerboseStateValidityChecks(bool flag)
