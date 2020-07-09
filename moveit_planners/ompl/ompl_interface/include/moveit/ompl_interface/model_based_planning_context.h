@@ -228,6 +228,8 @@ public:
     spec_.constraint_sampler_manager_ = csm;
   }
 
+  void setCheckPathConstraints(bool flag);
+
   void setVerboseStateValidityChecks(bool flag);
 
   void setProjectionEvaluator(const std::string& peval);
