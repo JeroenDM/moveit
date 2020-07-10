@@ -345,29 +345,43 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     context_spec.constraint_sampler_manager_ = constraint_sampler_manager_;
     context_spec.state_space_ = factory->getNewStateSpace(space_spec);
 
-    // Create a specific child of ob::Constraint for the constraint state space
-    // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
-    auto ompl_constraint = std::make_shared<XPositionConstraint>(
-        robot_model_, config.group, robot_model_->getJointModelGroup(config.group)->getVariableCount());
-    ompl_constraint->init(req.path_constraints);
-
-    context_spec.constrained_state_space_ =
-        std::make_shared<ob::ProjectedStateSpace>(context_spec.state_space_, ompl_constraint);
-    context_spec.constrained_space_info_ =
-        std::make_shared<ob::ConstrainedSpaceInformation>(context_spec.constrained_state_space_);
-
-    // Choose the correct simple setup type to load
-    // context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
-    context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.constrained_space_info_));
-
-    try
+    // TODO (jeroendm)
+    // Read a configuration parameter to decide whether to use a ConstrainedStateSpace
+    // or a "normal" ModelBasedStateSpace.
+    // This selection should be moved to the other getPlanningContext method where the
+    // parameter "enforce_joint_model_state_space" is read, because this also influences
+    // whether we can use a ConstrainedStateSpace
+    // Choose wich state space to create
+    auto it = config.config.find("use_ompl_constraint_state_space");
+    if (it != config.config.end() && boost::lexical_cast<bool>(it->second))
     {
-      // context_spec.state_space_->sanityChecks();
-      context_spec.constrained_state_space_->sanityChecks();
+      // Create a specific child of ob::Constraint for the constraint state space
+      // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
+      auto ompl_constraint = std::make_shared<XPositionConstraint>(
+          robot_model_, config.group, robot_model_->getJointModelGroup(config.group)->getVariableCount());
+      ompl_constraint->init(req.path_constraints);
+
+      context_spec.constrained_state_space_ =
+          std::make_shared<ob::ProjectedStateSpace>(context_spec.state_space_, ompl_constraint);
+      context_spec.constrained_space_info_ =
+          std::make_shared<ob::ConstrainedSpaceInformation>(context_spec.constrained_state_space_);
+
+      context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.constrained_space_info_));
+
+      try
+      {
+        // context_spec.state_space_->sanityChecks();
+        context_spec.constrained_state_space_->sanityChecks();
+      }
+      catch (ompl::Exception& ex)
+      {
+        ROS_ERROR_NAMED("planning_context_manager", "OMPL sanity check encountered an error: %s", ex.what());
+      }
     }
-    catch (ompl::Exception& ex)
+    else
     {
-      ROS_ERROR_NAMED("planning_context_manager", "OMPL sanity check encountered an error: %s", ex.what());
+      // Choose the correct simple setup type to load
+      context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
     }
 
     bool state_validity_cache = true;
