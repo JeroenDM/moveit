@@ -115,6 +115,12 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
 
   // convert the input state to the corresponding OMPL state
   ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
+
+  // TODO(jeroendm)
+  // I have to somehow use the correct state space for states
+  // but spec_.state_space_ is used in many places, so I have to figure out how to do it.
+  // ompl::base::ScopedState<> ompl_start_state(spec_.constrained_state_space_);
+
   spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
   ompl_simple_setup_->setStartState(ompl_start_state);  /* This is where I get a Segmentation fault. */
   ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
