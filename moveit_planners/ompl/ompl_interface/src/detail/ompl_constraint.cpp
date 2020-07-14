@@ -62,6 +62,8 @@ void XPositionConstraint::parseConstraintMsg(moveit_msgs::Constraints constraint
 void XPositionConstraint::function(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::Ref<Eigen::VectorXd> out) const
 {
   out[0] = forwardKinematics(x).translation().x() - target_position_.x();
+  // std::cout << "target: " << target_position_.transpose() << std::endl;
+  // std::cout << "fk pose error: " << forwardKinematics(x).translation().transpose() << std::endl;
 }
 
 void XPositionConstraint::jacobian(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::Ref<Eigen::MatrixXd> out) const

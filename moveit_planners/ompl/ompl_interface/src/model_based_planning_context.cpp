@@ -112,7 +112,9 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
   ompl_simple_setup_->getStateSpace()->computeSignature(space_signature_);
   // ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
   //     std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
-  ompl_simple_setup_->getStateSpace()->allocDefaultStateSampler();
+
+
+  // ompl_simple_setup_->getStateSpace()->allocDefaultStateSampler();
 
   // convert the input state to the corresponding OMPL state
   // ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
@@ -469,9 +471,13 @@ void ompl_interface::ModelBasedPlanningContext::convertPath(const ompl::geometri
                                                             robot_trajectory::RobotTrajectory& traj) const
 {
   moveit::core::RobotState ks = complete_initial_robot_state_;
+  pg.printAsMatrix(std::cout);
   for (std::size_t i = 0; i < pg.getStateCount(); ++i)
   {
-    spec_.state_space_->copyToRobotState(ks, pg.getState(i));
+    // how to do this properly?
+    const Eigen::Map<Eigen::VectorXd>& x = *pg.getState(i)->as<ompl::base::ConstrainedStateSpace::StateType>();
+    ks.setJointGroupPositions(getJointModelGroup(), x);
+    // spec_.state_space_->copyToRobotState(ks, pg.getState(i));
     traj.addSuffixWayPoint(ks, 0.0);
   }
 }
@@ -834,6 +840,8 @@ bool ompl_interface::ModelBasedPlanningContext::solve(double timeout, unsigned i
     }
     else
     {
+      // this else branch contains "ompl_simple_setup_->getGoal())" which could be a problem
+      // for constrained planning, but I do not think it is doing multi threading by default, or is it?
       ob::PlannerTerminationCondition ptc = constructPlannerTerminationCondition(timeout, start);
       registerTerminationCondition(ptc);
       int n = count / max_planning_threads_;
