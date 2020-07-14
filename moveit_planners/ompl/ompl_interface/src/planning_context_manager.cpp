@@ -355,6 +355,7 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     auto it = config.config.find("use_ompl_constraint_state_space");
     if (it != config.config.end() && boost::lexical_cast<bool>(it->second))
     {
+      ROS_DEBUG_STREAM("Using OMPL's constrained state space for planning.");
       // Create a specific child of ob::Constraint for the constraint state space
       // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
       auto ompl_constraint = std::make_shared<XPositionConstraint>(
@@ -380,6 +381,7 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     }
     else
     {
+      ROS_DEBUG_STREAM("Using a default state space and rejection sampling for path constraints.");
       // Choose the correct simple setup type to load
       context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
     }
@@ -430,7 +432,10 @@ const ompl_interface::ModelBasedStateSpaceFactoryPtr& ompl_interface::PlanningCo
 {
   auto f = factory_type.empty() ? state_space_factories_.begin() : state_space_factories_.find(factory_type);
   if (f != state_space_factories_.end())
+  {
+    ROS_DEBUG_NAMED("planning_context_manager", "Using '%s' parameterization for solving problem", f->first.c_str());
     return f->second;
+  }
   else
   {
     ROS_ERROR_NAMED("planning_context_manager", "Factory of type '%s' was not found", factory_type.c_str());
@@ -512,6 +517,13 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     }
   }
 
+  // bypass normal planning and use OMPL's constrained state space
+  auto it1 = pc->second.config.find("use_ompl_constraint_state_space");
+  if (it1 != pc->second.config.end() && boost::lexical_cast<bool>(it1->second))
+  {
+    ROS_INFO_STREAM("Bypass the default state space and use OMPL's constrained state space.");
+  }
+
   // Check if sampling in JointModelStateSpace is enforced for this group by user.
   // This is done by setting 'enforce_joint_model_state_space' to 'true' for the desired group in ompl_planning.yaml.
   //
@@ -545,6 +557,7 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     if (!context->setPathConstraints(req.path_constraints, &error_code))
       return ModelBasedPlanningContextPtr();
 
+    // the line below is where the simple stetup gets it's goal.
     if (!context->setGoalConstraints(req.goal_constraints, req.path_constraints, &error_code))
       return ModelBasedPlanningContextPtr();
 

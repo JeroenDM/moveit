@@ -114,31 +114,54 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
       std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
 
   // convert the input state to the corresponding OMPL state
-  ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
+  // ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
 
   // TODO(jeroendm)
   // I have to somehow use the correct state space for states
   // but spec_.state_space_ is used in many places, so I have to figure out how to do it.
-  // ompl::base::ScopedState<> ompl_start_state(spec_.constrained_state_space_);
+  ompl::base::ScopedState<> ompl_start_state(spec_.constrained_state_space_);
 
-  spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
-  ompl_simple_setup_->setStartState(ompl_start_state);  /* This is where I get a Segmentation fault. */
+  const moveit::core::RobotState& rs = getCompleteInitialRobotState();
+  Eigen::VectorXd start_joint_positions(rs.getVariableCount());
+  rs.copyJointGroupPositions(getJointModelGroup(), start_joint_positions);
+  ompl_start_state->as<ob::ConstrainedStateSpace::StateType>()->copy(start_joint_positions);
+
+  // spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
+  ompl_simple_setup_->setStartState(ompl_start_state); /* This is where I get a Segmentation fault. */
   ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
 
-  if (path_constraints_ && constraints_library_)
-  {
-    const ConstraintApproximationPtr& constraint_approx =
-        constraints_library_->getConstraintApproximation(path_constraints_msg_);
-    if (constraint_approx)
-    {
-      getOMPLStateSpace()->setInterpolationFunction(constraint_approx->getInterpolationFunction());
-      ROS_INFO_NAMED("model_based_planning_context", "Using precomputed interpolation states");
-    }
-  }
+  // bypass this special interpolation, which should be handles by the constrained state space
+  // if (path_constraints_ && constraints_library_)
+  // {
+  //   const ConstraintApproximationPtr& constraint_approx =
+  //       constraints_library_->getConstraintApproximation(path_constraints_msg_);
+  //   if (constraint_approx)
+  //   {
+  //     getOMPLStateSpace()->setInterpolationFunction(constraint_approx->getInterpolationFunction());
+  //     ROS_INFO_NAMED("model_based_planning_context", "Using precomputed interpolation states");
+  //   }
+  // }
 
   useConfig();
-  if (ompl_simple_setup_->getGoal())
-    ompl_simple_setup_->setup();
+  // if (ompl_simple_setup_->getGoal())
+  //   ompl_simple_setup_->setup();
+
+  // // set the coal in a specific way for a constrained state space
+  auto gc = goal_constraints_.at(0);
+  auto jc = gc->getJointConstraints();
+  Eigen::VectorXd goal_joint_positions(rs.getVariableCount());
+  assert(jc.size() == goal_joint_positions.size());
+  for (int dim = 0; dim < jc.size(); ++dim)
+  {
+    goal_joint_positions[dim] = jc[dim].position;
+  }
+  ROS_INFO_STREAM("Joint goal: " << goal_joint_positions.transpose());
+  ompl::base::ScopedState<> ompl_goal_state(spec_.constrained_state_space_);
+  ompl_goal_state->as<ob::ConstrainedStateSpace::StateType>()->copy(goal_joint_positions);
+  ompl_simple_setup_->setGoalState(ompl_goal_state);
+  // auto goal_ptr = constructGoal();
+  // ompl_simple_setup_->setGoal(goal_ptr);
+  // ompl_simple_setup_->setup();
 }
 
 void ompl_interface::ModelBasedPlanningContext::setProjectionEvaluator(const std::string& peval)
@@ -463,7 +486,8 @@ bool ompl_interface::ModelBasedPlanningContext::getSolutionPath(robot_trajectory
 void ompl_interface::ModelBasedPlanningContext::setCheckPathConstraints(bool flag)
 {
   if (ompl_simple_setup_->getStateValidityChecker())
-    static_cast<StateValidityChecker*>(ompl_simple_setup_->getStateValidityChecker().get())->setCheckPathConstraints(flag);
+    static_cast<StateValidityChecker*>(ompl_simple_setup_->getStateValidityChecker().get())
+        ->setCheckPathConstraints(flag);
 }
 
 void ompl_interface::ModelBasedPlanningContext::setVerboseStateValidityChecks(bool flag)
