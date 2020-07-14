@@ -110,8 +110,9 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
   }
   complete_initial_robot_state_.update();
   ompl_simple_setup_->getStateSpace()->computeSignature(space_signature_);
-  ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
-      std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
+  // ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
+  //     std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
+  ompl_simple_setup_->getStateSpace()->allocDefaultStateSampler();
 
   // convert the input state to the corresponding OMPL state
   // ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
@@ -650,7 +651,7 @@ bool ompl_interface::ModelBasedPlanningContext::setGoalConstraints(
   }
 
   ob::GoalPtr goal = constructGoal();
-  ompl_simple_setup_->setGoal(goal);
+  // ompl_simple_setup_->setGoal(goal);
   return static_cast<bool>(goal);
 }
 
@@ -699,13 +700,13 @@ void ompl_interface::ModelBasedPlanningContext::preSolve()
   const ob::PlannerPtr planner = ompl_simple_setup_->getPlanner();
   if (planner && !multi_query_planning_enabled_)
     planner->clear();
-  startSampling();
+  // startSampling();
   ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->resetMotionCounter();
 }
 
 void ompl_interface::ModelBasedPlanningContext::postSolve()
 {
-  stopSampling();
+  // stopSampling();
   int v = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getValidMotionCount();
   int iv = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getInvalidMotionCount();
   ROS_DEBUG_NAMED("model_based_planning_context", "There were %d valid motions and %d invalid motions.", v, iv);
