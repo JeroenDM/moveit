@@ -51,30 +51,35 @@ ompl_interface::ConstrainedPlanningStateSpace::ConstrainedPlanningStateSpace(
 void ompl_interface::ConstrainedPlanningStateSpace::copyToRobotState(moveit::core::RobotState& rstate,
                                                                      const ompl::base::State* state) const
 {
-  const Eigen::Map<Eigen::VectorXd>& x = *state->as<ompl::base::ConstrainedStateSpace::StateType>();
-  rstate.setJointGroupPositions(spec_.joint_model_group_, x);
+  // const Eigen::Map<Eigen::VectorXd>& x = *state->as<ompl::base::ConstrainedStateSpace::StateType>();
+  // rstate.setJointGroupPositions(spec_.joint_model_group_, x);
+  rstate.setJointGroupPositions(
+      spec_.joint_model_group_,
+      state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<StateType>()->values);
   rstate.update();
 }
 
-// void ompl_interface::ConstrainedPlanningStateSpace::copyToOMPLState(ompl::base::State* state,
-//                                                                     const moveit::core::RobotState& rstate) const
-// {
-//   Eigen::Map<Eigen::VectorXd>& x = *state->as<ompl::base::ConstrainedStateSpace::StateType>();
-//   rstate.copyJointGroupPositions(spec_.joint_model_group_, x);
-//   // clear any cached info (such as validity known or not)
-//   state->as<StateType>()->clearKnownInformation();
-// }
+void ompl_interface::ConstrainedPlanningStateSpace::copyToOMPLState(ompl::base::State* state,
+                                                                    const moveit::core::RobotState& rstate) const
+{
+  rstate.copyJointGroupPositions(
+      spec_.joint_model_group_,
+      state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<StateType>()->values);
+  // clear any cached info (such as validity known or not)
+  state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<StateType>()->clearKnownInformation();
+}
 
-// void ompl_interface::ConstrainedPlanningStateSpace::copyJointToOMPLState(ompl::base::State* state,
-//                                                                          const moveit::core::RobotState& robot_state,
-//                                                                          const moveit::core::JointModel* joint_model,
-//                                                                          int ompl_state_joint_index) const
-// {
-//   // Copy one joint (multiple variables possibly)
-//   memcpy(getValueAddressAtIndex(state, ompl_state_joint_index),
-//          robot_state.getVariablePositions() + joint_model->getFirstVariableIndex() * sizeof(double),
-//          joint_model->getVariableCount() * sizeof(double));
+void ompl_interface::ConstrainedPlanningStateSpace::copyJointToOMPLState(ompl::base::State* state,
+                                                                         const moveit::core::RobotState& robot_state,
+                                                                         const moveit::core::JointModel* joint_model,
+                                                                         int ompl_state_joint_index) const
+{
+  // Copy one joint (multiple variables possibly)
+  // no need to cast the state as ConstrainedPlanningStateSpace also implements getValueAddressAtIndex
+  memcpy(getValueAddressAtIndex(state, ompl_state_joint_index),
+         robot_state.getVariablePositions() + joint_model->getFirstVariableIndex() * sizeof(double),
+         joint_model->getVariableCount() * sizeof(double));
 
-//   // clear any cached info (such as validity known or not)
-//   state->as<StateType>()->clearKnownInformation();
-// }
+  // clear any cached info (such as validity known or not)
+  state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<StateType>()->clearKnownInformation();
+}

@@ -54,8 +54,8 @@ public:
 
   // override copy operations between OMPL and ROS, because a constrained state has a different internal structure
   virtual void copyToRobotState(moveit::core::RobotState& rstate, const ompl::base::State* state) const;
-  // virtual void copyToOMPLState(ompl::base::State* state, const moveit::core::RobotState& rstate) const;
-  // virtual void copyJointToOMPLState(ompl::base::State* state, const moveit::core::RobotState& robot_state,
-  //                                   const moveit::core::JointModel* joint_model, int ompl_state_joint_index) const;
+  virtual void copyToOMPLState(ompl::base::State* state, const moveit::core::RobotState& rstate) const;
+  virtual void copyJointToOMPLState(ompl::base::State* state, const moveit::core::RobotState& robot_state,
+                                    const moveit::core::JointModel* joint_model, int ompl_state_joint_index) const;
 };
 }  // namespace ompl_interface
