@@ -360,7 +360,7 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
       context_spec.state_space_ = std::make_shared<ompl_interface::ConstrainedPlanningStateSpace>(space_spec);
       // Create a specific child of ob::Constraint for the constraint state space
       // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
-      auto ompl_constraint = std::make_shared<XPositionConstraint>(
+      auto ompl_constraint = std::make_shared<PositionConstraint>(
           robot_model_, config.group, robot_model_->getJointModelGroup(config.group)->getVariableCount());
       ompl_constraint->init(req.path_constraints);
 
