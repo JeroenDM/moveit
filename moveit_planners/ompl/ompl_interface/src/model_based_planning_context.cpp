@@ -101,7 +101,8 @@ ompl_interface::ModelBasedPlanningContext::ModelBasedPlanningContext(const std::
 }
 
 void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle& nh,
-                                                          bool use_constraints_approximations)
+                                                          bool use_constraints_approximations,
+                                                          bool use_ompl_constrained_planning)
 {
   loadConstraintApproximations(nh);
   if (!use_constraints_approximations)
@@ -110,61 +111,66 @@ void ompl_interface::ModelBasedPlanningContext::configure(const ros::NodeHandle&
   }
   complete_initial_robot_state_.update();
   ompl_simple_setup_->getStateSpace()->computeSignature(space_signature_);
-  // ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
-  //     std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
 
+  if (use_ompl_constrained_planning)
+  {
+    ompl::base::ScopedState<> ompl_start_state(spec_.constrained_state_space_);
 
-  // ompl_simple_setup_->getStateSpace()->allocDefaultStateSampler();
+    const moveit::core::RobotState& rs = getCompleteInitialRobotState();
+    Eigen::VectorXd start_joint_positions(rs.getVariableCount());
+    rs.copyJointGroupPositions(getJointModelGroup(), start_joint_positions);
+    ompl_start_state->as<ob::ConstrainedStateSpace::StateType>()->copy(start_joint_positions);
 
-  // convert the input state to the corresponding OMPL state
-  // ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
+    // spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
+    ompl_simple_setup_->setStartState(ompl_start_state); /* This is where I get a Segmentation fault. */
+    ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
+  }
+  else
+  {
+    // TODO(jeroendm) some of this code should also be run for ompl constrained planning
+    ompl_simple_setup_->getStateSpace()->setStateSamplerAllocator(
+        std::bind(&ModelBasedPlanningContext::allocPathConstrainedSampler, this, std::placeholders::_1));
 
-  // TODO(jeroendm)
-  // I have to somehow use the correct state space for states
-  // but spec_.state_space_ is used in many places, so I have to figure out how to do it.
-  ompl::base::ScopedState<> ompl_start_state(spec_.constrained_state_space_);
+    ompl_simple_setup_->getStateSpace()->allocDefaultStateSampler();
 
-  const moveit::core::RobotState& rs = getCompleteInitialRobotState();
-  Eigen::VectorXd start_joint_positions(rs.getVariableCount());
-  rs.copyJointGroupPositions(getJointModelGroup(), start_joint_positions);
-  ompl_start_state->as<ob::ConstrainedStateSpace::StateType>()->copy(start_joint_positions);
+    // convert the input state to the corresponding OMPL state
+    ompl::base::ScopedState<> ompl_start_state(spec_.state_space_);
+    spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
+    ompl_simple_setup_->setStartState(ompl_start_state);
+    ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
 
-  // spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
-  ompl_simple_setup_->setStartState(ompl_start_state); /* This is where I get a Segmentation fault. */
-  ompl_simple_setup_->setStateValidityChecker(ob::StateValidityCheckerPtr(new StateValidityChecker(this)));
-
-  // bypass this special interpolation, which should be handles by the constrained state space
-  // if (path_constraints_ && constraints_library_)
-  // {
-  //   const ConstraintApproximationPtr& constraint_approx =
-  //       constraints_library_->getConstraintApproximation(path_constraints_msg_);
-  //   if (constraint_approx)
-  //   {
-  //     getOMPLStateSpace()->setInterpolationFunction(constraint_approx->getInterpolationFunction());
-  //     ROS_INFO_NAMED("model_based_planning_context", "Using precomputed interpolation states");
-  //   }
-  // }
+    if (path_constraints_ && constraints_library_)
+    {
+      const ConstraintApproximationPtr& constraint_approx =
+          constraints_library_->getConstraintApproximation(path_constraints_msg_);
+      if (constraint_approx)
+      {
+        getOMPLStateSpace()->setInterpolationFunction(constraint_approx->getInterpolationFunction());
+        ROS_INFO_NAMED("model_based_planning_context", "Using precomputed interpolation states");
+      }
+    }
+  }
 
   useConfig();
-  // if (ompl_simple_setup_->getGoal())
-  //   ompl_simple_setup_->setup();
+  if (ompl_simple_setup_->getGoal())
+    ompl_simple_setup_->setup();
 
-  // // set the coal in a specific way for a constrained state space
-  auto gc = goal_constraints_.at(0);
-  auto jc = gc->getJointConstraints();
-  Eigen::VectorXd goal_joint_positions(rs.getVariableCount());
-  assert(jc.size() == goal_joint_positions.size());
-  for (int dim = 0; dim < jc.size(); ++dim)
-  {
-    goal_joint_positions[dim] = jc[dim].position;
-  }
-  ROS_INFO_STREAM("Joint goal: " << goal_joint_positions.transpose());
-  ompl::base::ScopedState<> ompl_goal_state(spec_.constrained_state_space_);
-  ompl_goal_state->as<ob::ConstrainedStateSpace::StateType>()->copy(goal_joint_positions);
-  ompl_simple_setup_->setGoalState(ompl_goal_state);
-  // auto goal_ptr = constructGoal();
-  // ompl_simple_setup_->setGoal(goal_ptr);
-  // ompl_simple_setup_->setup();
+  // // // set the coal in a specific way for a constrained state space
+  // auto gc = goal_constraints_.at(0);
+  // auto jc = gc->getJointConstraints();
+  // Eigen::VectorXd goal_joint_positions(rs.getVariableCount());
+  // assert(jc.size() == goal_joint_positions.size());
+  // for (int dim = 0; dim < jc.size(); ++dim)
+  // {
+  //   goal_joint_positions[dim] = jc[dim].position;
+  // }
+  // ROS_INFO_STREAM("Joint goal: " << goal_joint_positions.transpose());
+  // ompl::base::ScopedState<> ompl_goal_state(spec_.constrained_state_space_);
+  // ompl_goal_state->as<ob::ConstrainedStateSpace::StateType>()->copy(goal_joint_positions);
+  // ompl_simple_setup_->setGoalState(ompl_goal_state);
+  // // auto goal_ptr = constructGoal();
+  // // ompl_simple_setup_->setGoal(goal_ptr);
+  // // ompl_simple_setup_->setup();
 }
 
 void ompl_interface::ModelBasedPlanningContext::setProjectionEvaluator(const std::string& peval)
@@ -657,7 +663,7 @@ bool ompl_interface::ModelBasedPlanningContext::setGoalConstraints(
   }
 
   ob::GoalPtr goal = constructGoal();
-  // ompl_simple_setup_->setGoal(goal);
+  ompl_simple_setup_->setGoal(goal);
   return static_cast<bool>(goal);
 }
 
@@ -706,13 +712,13 @@ void ompl_interface::ModelBasedPlanningContext::preSolve()
   const ob::PlannerPtr planner = ompl_simple_setup_->getPlanner();
   if (planner && !multi_query_planning_enabled_)
     planner->clear();
-  // startSampling();
+  startSampling();
   ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->resetMotionCounter();
 }
 
 void ompl_interface::ModelBasedPlanningContext::postSolve()
 {
-  // stopSampling();
+  stopSampling();
   int v = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getValidMotionCount();
   int iv = ompl_simple_setup_->getSpaceInformation()->getMotionValidator()->getInvalidMotionCount();
   ROS_DEBUG_NAMED("model_based_planning_context", "There were %d valid motions and %d invalid motions.", v, iv);

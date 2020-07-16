@@ -337,7 +337,7 @@ public:
    * approximations to */
   bool saveConstraintApproximations(const ros::NodeHandle& nh);
 
-  virtual void configure(const ros::NodeHandle& nh, bool use_constraints_approximations);
+  virtual void configure(const ros::NodeHandle& nh, bool use_constraints_approximations, bool use_ompl_constrained_planning);
 
 protected:
   void preSolve();
