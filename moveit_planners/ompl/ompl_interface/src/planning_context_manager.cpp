@@ -72,6 +72,7 @@
 
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
+#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
 #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
 #include <moveit/ompl_interface/detail/ompl_constraint.h>
 
@@ -356,6 +357,7 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     if (it != config.config.end() && boost::lexical_cast<bool>(it->second))
     {
       ROS_DEBUG_STREAM("Using OMPL's constrained state space for planning.");
+      context_spec.state_space_ = std::make_shared<ompl_interface::ConstrainedPlanningStateSpace>(space_spec);
       // Create a specific child of ob::Constraint for the constraint state space
       // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
       auto ompl_constraint = std::make_shared<XPositionConstraint>(

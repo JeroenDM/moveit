@@ -475,9 +475,9 @@ void ompl_interface::ModelBasedPlanningContext::convertPath(const ompl::geometri
   for (std::size_t i = 0; i < pg.getStateCount(); ++i)
   {
     // how to do this properly?
-    const Eigen::Map<Eigen::VectorXd>& x = *pg.getState(i)->as<ompl::base::ConstrainedStateSpace::StateType>();
-    ks.setJointGroupPositions(getJointModelGroup(), x);
-    // spec_.state_space_->copyToRobotState(ks, pg.getState(i));
+    // const Eigen::Map<Eigen::VectorXd>& x = *pg.getState(i)->as<ompl::base::ConstrainedStateSpace::StateType>();
+    // ks.setJointGroupPositions(getJointModelGroup(), x);
+    spec_.state_space_->copyToRobotState(ks, pg.getState(i));
     traj.addSuffixWayPoint(ks, 0.0);
   }
 }
