@@ -101,9 +101,19 @@ public:
    * */
   virtual void jacobian(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::Ref<Eigen::MatrixXd> out) const;
 
-  // generic helper functions for robot kinematics.
-  // TODO(jeroendm) Are these actually const, as the robot state is modified? How come it works?
+  /** \brief Wrapper for forward kinematics calculated by MoveIt's Robot State.
+   * 
+   * TODO(jeroendm) Are these actually const, as the robot state is modified? How come it works?
+   * Also, output arguments could be significantly more performant.
+   * */
   Eigen::Isometry3d forwardKinematics(const Eigen::Ref<const Eigen::VectorXd>& joint_values) const;
+
+  /** \brief Calculate the geometric Jacobian using MoveIt's Robot State.
+   * 
+   * Ideally I would pass the output agrument from OMPL's jacobian function directly,
+   * but I cannot pass an object of type , Eigen::Ref<Eigen::MatrixXd> to MoveIt's
+   * Jacobian method.
+   * */
   Eigen::MatrixXd geometricJacobian(const Eigen::Ref<const Eigen::VectorXd>& joint_values) const;
 
   /** \brief Parse bounds on position and orientation parameters from MoveIt's constraint message.
