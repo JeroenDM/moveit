@@ -29,10 +29,6 @@ BaseConstraint::BaseConstraint(robot_model::RobotModelConstPtr robot_model, cons
   robot_state_.reset(new robot_state::RobotState(robot_model_));
   robot_state_->setToDefaultValues();
   joint_model_group_ = robot_state_->getJointModelGroup(group);
-
-  // use end-effector link by default
-  // \todo use the link specified in the constraint message
-  link_name_ = joint_model_group_->getLinkModelNames().back();
 }
 
 void BaseConstraint::init(moveit_msgs::Constraints constraints)
@@ -49,7 +45,11 @@ Eigen::Isometry3d BaseConstraint::forwardKinematics(const Eigen::Ref<const Eigen
 Eigen::MatrixXd BaseConstraint::geometricJacobian(const Eigen::Ref<const Eigen::VectorXd>& joint_values) const
 {
   robot_state_->setJointGroupPositions(joint_model_group_, joint_values);
-  return robot_state_->getJacobian(joint_model_group_);
+  Eigen::MatrixXd jacobian;
+  bool success = robot_state_->getJacobian(joint_model_group_, joint_model_group_->getLinkModel(link_name_),
+                                           Eigen::Vector3d(0.0, 0.0, 0.0), jacobian);
+  assert(success);
+  return jacobian;
 }
 
 void BaseConstraint::function(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::Ref<Eigen::VectorXd> out) const
@@ -132,6 +132,8 @@ void XPositionConstraint::parseConstraintMsg(moveit_msgs::Constraints constraint
   geometry_msgs::Point position =
       constraints.position_constraints.at(0).constraint_region.primitive_poses.at(0).position;
   target_position_ << position.x, position.y, position.z;
+
+  link_name_ = constraints.position_constraints.at(0).link_name;
 }
 
 void XPositionConstraint::function(const Eigen::Ref<const Eigen::VectorXd>& x, Eigen::Ref<Eigen::VectorXd> out) const
