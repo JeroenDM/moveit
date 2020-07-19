@@ -34,6 +34,11 @@
 
 /* Author: Jeroen De Maeyer */
 
+/** This file tests the implementation of constriants inheriting from
+ * the ompl::base::Constraint class in the file /detail/ompl_constraint.h/cpp.
+ * These are used to create an ompl::base::ConstrainedStateSpace to plan with path constraints.
+ **/
+
 #include <moveit/ompl_interface/detail/ompl_constraint.h>
 
 #include <memory>
@@ -54,12 +59,20 @@
 #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 #include <ompl/base/ConstrainedSpaceInformation.h>
 
-/** Number of times to run a test that uses randomly generated input. **/
+/** \brief Number of times to run a test that uses randomly generated input. **/
 constexpr int NUM_RANDOM_TESTS{ 10 };
 
-/** For failing tests, some extra print statements are useful. **/
+/** \brief For failing tests, some extra print statements are useful. **/
 constexpr bool VERBOSE{ false };
 
+/** \brief Allowed error when comparing Jacobian matrix error.
+ *
+ * High tolerance because of high finite difference error.
+ * (And it is the L1-norm over the whole matrix difference.)
+ **/
+constexpr double JAC_ERROR_TOLERANCE{ 1e-4 };
+
+/** \brief Helper function to create a specific position constraint. **/
 moveit_msgs::PositionConstraint createPositionConstraint(std::string& base_link, std::string& ee_link_name)
 {
   shape_msgs::SolidPrimitive box_constraint;
@@ -81,21 +94,38 @@ moveit_msgs::PositionConstraint createPositionConstraint(std::string& base_link,
   return position_constraint;
 }
 
-class LoadPandaModel : public testing::Test
+/** \brief Robot indepentent test class implementing all tests
+ *
+ * All tests are implemented in a generic test fixture, so it is
+ * easy to run them on different robots.
+ *
+ * It is implemented this way to avoid the ros specific test framework
+ * outside moveit_ros.
+ *
+ * (This is an (uglier) alternative to using the rostest framework
+ * and reading the robot settings from the parameter server.
+ * Then we have several rostest launch files that load the parameters
+ * for a specific robot and run the same compiled tests for all robots.)
+ * */
+class ConstraintTestBaseClass : public testing::Test
 {
 protected:
+  ConstraintTestBaseClass(const std::string& robot_name, const std::string& group_name)
+    : robot_name_(robot_name), group_name_(group_name)
+  {
+  }
+
   void SetUp() override
   {
     // load robot
-    robot_model_ = moveit::core::loadTestingRobotModel("panda");
+    robot_model_ = moveit::core::loadTestingRobotModel(robot_name_);
     robot_state_ = std::make_shared<robot_state::RobotState>(robot_model_);
-    joint_model_group_ = robot_state_->getJointModelGroup("panda_arm");
+    joint_model_group_ = robot_state_->getJointModelGroup(group_name_);
 
     // extract useful parameters for tests
     num_dofs_ = joint_model_group_->getVariableCount();
     ee_link_name_ = joint_model_group_->getLinkModelNames().back();
     base_link_name_ = robot_model_->getRootLinkName();
-    group_name_ = joint_model_group_->getName();
   };
 
   void TearDown() override
@@ -135,103 +165,177 @@ protected:
     return J;
   }
 
-protected:
-  moveit::core::RobotModelPtr robot_model_;
-  urdf::ModelInterfaceSharedPtr urdf_model_;
-  srdf::ModelSharedPtr srdf_model_;
-  robot_state::RobotStatePtr robot_state_;
-  const robot_state::JointModelGroup* joint_model_group_;
-  bool urdf_ok_;
-  bool srdf_ok_;
-  std::size_t num_dofs_;
-  std::shared_ptr<ompl_interface::BaseConstraint> constraint_;
-  std::string base_link_name_;
-  std::string ee_link_name_;
-  std::string group_name_;
-};
-
-TEST_F(LoadPandaModel, InitPositionConstraint)
-{
-  moveit_msgs::Constraints constraint_msgs;
-  constraint_msgs.position_constraints.push_back(createPositionConstraint(base_link_name_, ee_link_name_));
-
-  constraint_ = std::make_shared<ompl_interface::PositionConstraint>(robot_model_, group_name_, num_dofs_);
-  constraint_->init(constraint_msgs);
-}
-
-TEST_F(LoadPandaModel, PositionConstraintJacobian)
-{
-  moveit_msgs::Constraints constraint_msgs;
-  constraint_msgs.position_constraints.push_back(createPositionConstraint(base_link_name_, ee_link_name_));
-
-  constraint_ = std::make_shared<ompl_interface::PositionConstraint>(robot_model_, group_name_, num_dofs_);
-  constraint_->init(constraint_msgs);
-
-  double total_error{ 999.9 };
-  const double ERROR_TOLERANCE{ 1e-4 }; /** High tolerance because of high finite difference error. **/
-
-  for (int i{ 0 }; i < NUM_RANDOM_TESTS; ++i)
+  void setPositionConstraints()
   {
-    auto q = getRandomState();
-    auto J_exact = constraint_->calcErrorJacobian(q);
-    auto J_approx = numericalJacobianPosition(q);
+    moveit_msgs::Constraints constraint_msgs;
+    constraint_msgs.position_constraints.push_back(createPositionConstraint(base_link_name_, ee_link_name_));
 
-    if (VERBOSE)
+    constraint_ = std::make_shared<ompl_interface::PositionConstraint>(robot_model_, group_name_, num_dofs_);
+    constraint_->init(constraint_msgs);
+  }
+
+  void testJacobian()
+  {
+    double total_error{ 999.9 };
+
+    for (int i{ 0 }; i < NUM_RANDOM_TESTS; ++i)
     {
-      std::cout << "Analytical jacobian: \n";
-      std::cout << J_exact << std::endl;
-      std::cout << "Finite difference jacobian: \n";
-      std::cout << J_approx << std::endl;
+      auto q = getRandomState();
+      auto J_exact = constraint_->calcErrorJacobian(q);
+      auto J_approx = numericalJacobianPosition(q);
+
+      if (VERBOSE)
+      {
+        std::cout << "Analytical jacobian: \n";
+        std::cout << J_exact << std::endl;
+        std::cout << "Finite difference jacobian: \n";
+        std::cout << J_approx << std::endl;
+      }
+
+      total_error = (J_exact - J_approx).lpNorm<1>();
+      EXPECT_LT(total_error, JAC_ERROR_TOLERANCE);
+    }
+  }
+
+  void testOMPLProjectedStateSpaceConstruction()
+  {
+    auto state_space = std::make_shared<ompl::base::RealVectorStateSpace>(num_dofs_);
+    ompl::base::RealVectorBounds bounds(num_dofs_);
+
+    // get joint limits from the joint model group
+    auto joint_limits = joint_model_group_->getActiveJointModelsBounds();
+    EXPECT_EQ(joint_limits.size(), num_dofs_);
+    for (std::size_t i{ 0 }; i < num_dofs_; ++i)
+    {
+      EXPECT_EQ(joint_limits[i]->size(), 1);
+      bounds.setLow(i, joint_limits[i]->at(0).min_position_);
+      bounds.setHigh(i, joint_limits[i]->at(0).max_position_);
     }
 
-    total_error = (J_exact - J_approx).lpNorm<1>();
-    EXPECT_LT(total_error, ERROR_TOLERANCE);
-  }
-}
+    state_space->setBounds(bounds);
 
-TEST_F(LoadPandaModel, PositionConstraintOMPLCheck)
+    auto constrained_state_space = std::make_shared<ompl::base::ProjectedStateSpace>(state_space, constraint_);
+
+    auto constrained_state_space_info =
+        std::make_shared<ompl::base::ConstrainedSpaceInformation>(constrained_state_space);
+
+    // TODO(jeroendm) Fix issues with sanity checks.
+    // The jacobian test is expected to fail because of the discontinuous constraint derivative.
+    // The issue with the state sampler is unresolved.
+    // int flags = 1 & ompl::base::ConstrainedStateSpace::CONSTRAINED_STATESPACE_JACOBIAN;
+    // flags = flags & ompl::base::ConstrainedStateSpace::CONSTRAINED_STATESPACE_SAMPLERS;
+    try
+    {
+      constrained_state_space->sanityChecks();
+    }
+    catch (ompl::Exception& ex)
+    {
+      ROS_ERROR("Sanity checks did not pass: %s", ex.what());
+    }
+  }
+
+protected:
+  const std::string group_name_;
+  const std::string robot_name_;
+
+  moveit::core::RobotModelPtr robot_model_;
+  robot_state::RobotStatePtr robot_state_;
+  const robot_state::JointModelGroup* joint_model_group_;
+
+  std::shared_ptr<ompl_interface::BaseConstraint> constraint_;
+
+  std::size_t num_dofs_;
+  std::string base_link_name_;
+  std::string ee_link_name_;
+};
+
+/***************************************************************************
+ * Run all tests on the Panda robot
+ * ************************************************************************/
+class PandaConstraintTest : public ConstraintTestBaseClass
 {
-  auto state_space = std::make_shared<ompl::base::RealVectorStateSpace>(num_dofs_);
-  ompl::base::RealVectorBounds bounds(num_dofs_);
-
-  // get joint limits from the joint model group
-  auto joint_limits = joint_model_group_->getActiveJointModelsBounds();
-  EXPECT_EQ(joint_limits.size(), num_dofs_);
-  for (std::size_t i{ 0 }; i < num_dofs_; ++i)
+protected:
+  PandaConstraintTest() : ConstraintTestBaseClass("panda", "panda_arm")
   {
-    EXPECT_EQ(joint_limits[i]->size(), 1);
-    bounds.setLow(i, joint_limits[i]->at(0).min_position_);
-    bounds.setHigh(i, joint_limits[i]->at(0).max_position_);
   }
+};
 
-  state_space->setBounds(bounds);
-
-  moveit_msgs::Constraints constraint_msgs;
-  constraint_msgs.position_constraints.push_back(createPositionConstraint(base_link_name_, ee_link_name_));
-
-  constraint_ = std::make_shared<ompl_interface::PositionConstraint>(robot_model_, group_name_, num_dofs_);
-  constraint_->init(constraint_msgs);
-
-  auto constrained_state_space = std::make_shared<ompl::base::ProjectedStateSpace>(state_space, constraint_);
-
-  auto constrained_state_space_info =
-      std::make_shared<ompl::base::ConstrainedSpaceInformation>(constrained_state_space);
-
-  // TODO(jeroendm) Fix issues with sanity checks.
-  // The jacobian test is expected to fail because of the discontinuous constraint derivative.
-  // The issue with the state sampler is unresolved.
-  // int flags = 1 & ompl::base::ConstrainedStateSpace::CONSTRAINED_STATESPACE_JACOBIAN;
-  // flags = flags & ompl::base::ConstrainedStateSpace::CONSTRAINED_STATESPACE_SAMPLERS;
-  try
-  {
-    constrained_state_space->sanityChecks();
-  }
-  catch (ompl::Exception& ex)
-  {
-    ROS_ERROR("Sanity checks did not pass: %s", ex.what());
-  }
+TEST_F(PandaConstraintTest, InitPositionConstraint)
+{
+  setPositionConstraints();
 }
 
+TEST_F(PandaConstraintTest, PositionConstraintJacobian)
+{
+  setPositionConstraints();
+  testJacobian();
+}
+
+TEST_F(PandaConstraintTest, PositionConstraintOMPLCheck)
+{
+  setPositionConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
+/***************************************************************************
+ * Run all tests on the Fanuc robot
+ * ************************************************************************/
+class FanucConstraintTest : public ConstraintTestBaseClass
+{
+protected:
+  FanucConstraintTest() : ConstraintTestBaseClass("fanuc", "manipulator")
+  {
+  }
+};
+
+TEST_F(FanucConstraintTest, InitPositionConstraint)
+{
+  setPositionConstraints();
+}
+
+TEST_F(FanucConstraintTest, PositionConstraintJacobian)
+{
+  setPositionConstraints();
+  testJacobian();
+}
+
+TEST_F(FanucConstraintTest, PositionConstraintOMPLCheck)
+{
+  setPositionConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
+/***************************************************************************
+ * Run all tests on the PR2's left arm
+ * ************************************************************************/
+class PR2LeftArmConstraintTest : public ConstraintTestBaseClass
+{
+protected:
+  PR2LeftArmConstraintTest() : ConstraintTestBaseClass("pr2", "left_arm")
+  {
+  }
+};
+
+TEST_F(PR2LeftArmConstraintTest, InitPositionConstraint)
+{
+  setPositionConstraints();
+}
+
+TEST_F(PR2LeftArmConstraintTest, PositionConstraintJacobian)
+{
+  setPositionConstraints();
+  testJacobian();
+}
+
+TEST_F(PR2LeftArmConstraintTest, PositionConstraintOMPLCheck)
+{
+  setPositionConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
+/***************************************************************************
+ * MAIN
+ * ************************************************************************/
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);
