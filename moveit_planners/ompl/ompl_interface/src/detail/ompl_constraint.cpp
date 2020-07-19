@@ -7,6 +7,9 @@
 
 namespace ompl_interface
 {
+
+constexpr char LOGNAME[] = "ompl_constraint";
+
 double Bounds::distance(double value) const
 {
   if (value < lower)
@@ -166,7 +169,7 @@ XPositionConstraint::XPositionConstraint(robot_model::RobotModelConstPtr robot_m
 
 void XPositionConstraint::parseConstraintMsg(moveit_msgs::Constraints constraints)
 {
-  ROS_INFO_STREAM("Creating equality constraints on x-position of end-effector.");
+  ROS_INFO_NAMED(LOGNAME, "Creating equality constraints on x-position of end-effector.");
   geometry_msgs::Point position =
       constraints.position_constraints.at(0).constraint_region.primitive_poses.at(0).position;
   target_position_ << position.x, position.y, position.z;
@@ -230,14 +233,14 @@ std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr
 
   if (num_pos_con > 0 && num_ori_con > 0)
   {
-    ROS_ERROR_STREAM("Combining position and orientation constraints not implemented yet.");
+    ROS_ERROR_NAMED(LOGNAME, "Combining position and orientation constraints not implemented yet.");
     return nullptr;
   }
   else if (num_pos_con > 0)
   {
     if (num_pos_con > 1)
     {
-      ROS_WARN_STREAM("Only a single position constraints supported. Using the first one.");
+      ROS_WARN_NAMED(LOGNAME, "Only a single position constraints supported. Using the first one.");
     }
     auto pos_con = std::make_shared<PositionConstraint>(robot_model, group, num_dofs);
     // auto pos_con = std::make_shared<XPositionConstraint>(robot_model, group, num_dofs);
@@ -248,7 +251,7 @@ std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr
   {
     if (num_ori_con > 1)
     {
-      ROS_WARN_STREAM("Only a single orientation constraints supported. Using the first one.");
+      ROS_WARN_NAMED(LOGNAME, "Only a single orientation constraints supported. Using the first one.");
     }
 
     auto ori_con = std::make_shared<AngleAxisConstraint>(robot_model, group, num_dofs);
@@ -257,7 +260,7 @@ std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr
   }
   else
   {
-    ROS_ERROR_STREAM("No path constraints found in planning request.");
+    ROS_ERROR_NAMED(LOGNAME, "No path constraints found in planning request.");
     return nullptr;
   }
 }
