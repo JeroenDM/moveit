@@ -116,6 +116,44 @@ Eigen::MatrixXd PositionConstraint::calcErrorJacobian(const Eigen::Ref<const Eig
   return target_orientation_.matrix().transpose() * geometricJacobian(x).topRows(3);
 }
 
+/******************************************
+ * Angle-axis error constraints
+ * ****************************************/
+void AngleAxisConstraint::parseConstraintMsg(moveit_msgs::Constraints constraints)
+{
+  bounds_.clear();
+  bounds_ = orientationConstraintMsgToBoundVector(constraints.orientation_constraints.at(0));
+  // ROS_INFO_STREAM("Parsing angle-axis constraints");
+  // ROS_INFO_STREAM("Parsed rx / roll constraints" << bounds_[0]);
+  // ROS_INFO_STREAM("Parsed ry / pitch constraints" << bounds_[1]);
+  // ROS_INFO_STREAM("Parsed rz / yaw constraints" << bounds_[2]);
+
+  tf::quaternionMsgToEigen(constraints.orientation_constraints.at(0).orientation, target_orientation_);
+
+  link_name_ = constraints.orientation_constraints.at(0).link_name;
+}
+
+Eigen::VectorXd AngleAxisConstraint::calcError(const Eigen::Ref<const Eigen::VectorXd>& x) const
+{
+  // TODO(jeroendm) I'm not sure yet whether I want the error expressed in the current ee_frame, or target_frame,
+  // or world frame. This implementation expressed the error in the end-effector frame.
+  Eigen::Matrix3d Rerror = forwardKinematics(x).rotation().transpose() * target_orientation_;
+  Eigen::AngleAxisd aa(Rerror);
+  double angle = aa.angle();
+  assert(std::abs(angle) < M_PI);
+  return aa.axis() * angle;
+}
+
+// mysterious minus sign in Jacobian, found through trial and error...
+Eigen::MatrixXd AngleAxisConstraint::calcErrorJacobian(const Eigen::Ref<const Eigen::VectorXd>& x) const
+{
+  // Eigen::AngleAxisd aa {forwardKinematics(x).rotation().transpose() * target_as_quat_};
+
+  Eigen::AngleAxisd aa{ forwardKinematics(x).rotation() };
+  // TODO(jeroendm) Find out where the mysterious minus sign comes from
+  return -angularVelocityToAngleAxis(aa.angle(), aa.axis()) * geometricJacobian(x).bottomRows(3);
+}
+
 /************************************
  * Equality constraints on X position
  * **********************************/
@@ -165,6 +203,20 @@ std::vector<Bounds> positionConstraintMsgToBoundVector(moveit_msgs::PositionCons
   return { { -dims[0] / 2, dims[0] / 2 }, { -dims[1] / 2, dims[1] / 2 }, { -dims[2] / 2, dims[2] / 2 } };
 }
 
+std::vector<Bounds> orientationConstraintMsgToBoundVector(moveit_msgs::OrientationConstraint ori_con)
+{
+  std::vector<double> dims{ ori_con.absolute_x_axis_tolerance, ori_con.absolute_y_axis_tolerance,
+                            ori_con.absolute_z_axis_tolerance };
+
+  // dimension of -1 signifies unconstrained parameter, so set to infinity
+  for (auto& dim : dims)
+  {
+    if (dim == -1)
+      dim = std::numeric_limits<double>::infinity();
+  }
+  return { { -dims[0] / 2, dims[0] / 2 }, { -dims[1] / 2, dims[1] / 2 }, { -dims[2] / 2, dims[2] / 2 } };
+}
+
 /******************************************
  * Constraint Factory
  * ****************************************/
@@ -185,7 +237,7 @@ std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr
   {
     if (num_pos_con > 1)
     {
-      ROS_ERROR_STREAM("Only a single position constraints supported. Using the first one.");
+      ROS_WARN_STREAM("Only a single position constraints supported. Using the first one.");
     }
     auto pos_con = std::make_shared<PositionConstraint>(robot_model, group, num_dofs);
     // auto pos_con = std::make_shared<XPositionConstraint>(robot_model, group, num_dofs);
@@ -196,17 +248,37 @@ std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr
   {
     if (num_ori_con > 1)
     {
-      ROS_ERROR_STREAM("Only a single orientation constraints supported. Using the first one.");
+      ROS_WARN_STREAM("Only a single orientation constraints supported. Using the first one.");
     }
 
-    ROS_ERROR_STREAM("Orientation constraints not implemented yet.");
-    return nullptr;
+    auto ori_con = std::make_shared<AngleAxisConstraint>(robot_model, group, num_dofs);
+    ori_con->init(constraints);
+    return ori_con;
   }
   else
   {
     ROS_ERROR_STREAM("No path constraints found in planning request.");
     return nullptr;
   }
+}
+
+/******************************************
+ * Angular velocity conversion
+ * ****************************************/
+Eigen::Matrix3d angularVelocityToAngleAxis(double angle, Eigen::Vector3d axis)
+{
+  Eigen::Matrix3d E;
+
+  double t{ std::abs(angle) };
+  Eigen::Vector3d r{ axis * angle };
+  Eigen::Matrix3d r_skew;
+  r_skew << 0, -r[2], r[1], r[2], 0, -r[0], -r[1], r[0], 0;
+
+  double C;
+  C = (1 - 0.5 * t * std::sin(t) / (1 - std::cos(t)));
+
+  E = Eigen::Matrix3d::Identity() - 0.5 * r_skew + r_skew * r_skew / (t * t) * C;
+  return E;
 }
 
 }  // namespace ompl_interface

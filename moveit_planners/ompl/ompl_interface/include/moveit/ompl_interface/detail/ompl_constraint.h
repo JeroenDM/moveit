@@ -188,6 +188,28 @@ public:
   virtual Eigen::MatrixXd calcErrorJacobian(const Eigen::Ref<const Eigen::VectorXd>& x) const override;
 };
 
+/** \brief orientation constraints based on angle-axis error.
+ *
+ * (aka exponential coordinates)
+ * This is analog to how orientation Error is calculated in the TrajOpt motion planner.
+ * It is NOT how orientation error is handled in the default MoveIt constraint samplers.
+ * (There, XYZ intrinsic euler angles are used.)
+ *
+ * */
+class AngleAxisConstraint : public BaseConstraint
+{
+public:
+  AngleAxisConstraint(robot_model::RobotModelConstPtr robot_model, const std::string& group,
+                      const unsigned int num_dofs)
+    : BaseConstraint(robot_model, group, num_dofs)
+  {
+  }
+
+  virtual void parseConstraintMsg(moveit_msgs::Constraints constraints) override;
+  virtual Eigen::VectorXd calcError(const Eigen::Ref<const Eigen::VectorXd>& x) const override;
+  virtual Eigen::MatrixXd calcErrorJacobian(const Eigen::Ref<const Eigen::VectorXd>& x) const override;
+};
+
 /** \brief hardcoded equality constraints on x position.
  *
  * OMPL's constraint planning methods "Atlas" and "TangentBundle"
@@ -220,8 +242,30 @@ public:
  * */
 std::vector<Bounds> positionConstraintMsgToBoundVector(moveit_msgs::PositionConstraint pos_con);
 
+/** \brief Extract orientation constraints from the MoveIt message
+ *
+ * These bounds are assumed to be centered around the nominal orientation / desired orientation
+ * given in the field "orientation" in the message.
+ * These bounds are therefore bounds on the orientation error between the desired orientation
+ * and the current orientation of the end-effector.
+ *
+ * The three bounds x, y, and z, can be applied to different parameterizations of the rotation error.
+ * (Roll, pithc, and yaw or exponential coordinates or something else.)
+ *
+ * */
+std::vector<Bounds> orientationConstraintMsgToBoundVector(moveit_msgs::OrientationConstraint ori_con);
+
 /** \brief Factory to create constraints based on what is in the MoveIt constraint message. **/
 std::shared_ptr<BaseConstraint> createConstraint(robot_model::RobotModelConstPtr robot_model, const std::string& group,
                                                  moveit_msgs::Constraints constraints);
+
+/** \brief Conversion matrix to go from angular velocity in the world frame to
+ * angle axis equivalent.
+ *
+ * Based on:
+ * https://ethz.ch/content/dam/ethz/special-interest/mavt/robotics-n-intelligent-systems/rsl-dam/documents/RobotDynamics2016/RD2016script.pdf
+ * 
+ * */
+Eigen::Matrix3d angularVelocityToAngleAxis(double angle, Eigen::Vector3d axis);
 
 }  // namespace ompl_interface

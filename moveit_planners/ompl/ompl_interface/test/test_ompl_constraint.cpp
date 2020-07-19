@@ -94,6 +94,18 @@ moveit_msgs::PositionConstraint createPositionConstraint(std::string& base_link,
   return position_constraint;
 }
 
+moveit_msgs::OrientationConstraint createOrientationConstraint(std::string& base_link, std::string& ee_link_name)
+{
+  moveit_msgs::OrientationConstraint orientation_constraint;
+  orientation_constraint.header.frame_id = base_link;
+  orientation_constraint.link_name = ee_link_name;
+  orientation_constraint.orientation.w = 1.0;
+  orientation_constraint.absolute_x_axis_tolerance = 0.1;
+  orientation_constraint.absolute_y_axis_tolerance = 0.1;
+  orientation_constraint.absolute_z_axis_tolerance = -1.0;
+  return orientation_constraint;
+}
+
 /** \brief Robot indepentent test class implementing all tests
  *
  * All tests are implemented in a generic test fixture, so it is
@@ -171,6 +183,15 @@ protected:
     constraint_msgs.position_constraints.push_back(createPositionConstraint(base_link_name_, ee_link_name_));
 
     constraint_ = std::make_shared<ompl_interface::PositionConstraint>(robot_model_, group_name_, num_dofs_);
+    constraint_->init(constraint_msgs);
+  }
+
+  void setOrientationConstraints()
+  {
+    moveit_msgs::Constraints constraint_msgs;
+    constraint_msgs.orientation_constraints.push_back(createOrientationConstraint(base_link_name_, ee_link_name_));
+
+    constraint_ = std::make_shared<ompl_interface::AngleAxisConstraint>(robot_model_, group_name_, num_dofs_);
     constraint_->init(constraint_msgs);
   }
 
@@ -277,6 +298,17 @@ TEST_F(PandaConstraintTest, PositionConstraintOMPLCheck)
   testOMPLProjectedStateSpaceConstruction();
 }
 
+TEST_F(PandaConstraintTest, InitAngleAxisConstraint)
+{
+  setOrientationConstraints();
+}
+
+TEST_F(PandaConstraintTest, AngleAxisConstraintOMPLCheck)
+{
+  setOrientationConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
 /***************************************************************************
  * Run all tests on the Fanuc robot
  * ************************************************************************/
@@ -305,6 +337,17 @@ TEST_F(FanucConstraintTest, PositionConstraintOMPLCheck)
   testOMPLProjectedStateSpaceConstruction();
 }
 
+TEST_F(FanucConstraintTest, InitAngleAxisConstraint)
+{
+  setOrientationConstraints();
+}
+
+TEST_F(FanucConstraintTest, AngleAxisConstraintOMPLCheck)
+{
+  setOrientationConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
 /***************************************************************************
  * Run all tests on the PR2's left arm
  * ************************************************************************/
@@ -330,6 +373,17 @@ TEST_F(PR2LeftArmConstraintTest, PositionConstraintJacobian)
 TEST_F(PR2LeftArmConstraintTest, PositionConstraintOMPLCheck)
 {
   setPositionConstraints();
+  testOMPLProjectedStateSpaceConstruction();
+}
+
+TEST_F(PR2LeftArmConstraintTest, InitAngleAxisConstraint)
+{
+  setOrientationConstraints();
+}
+
+TEST_F(PR2LeftArmConstraintTest, AngleAxisConstraintOMPLCheck)
+{
+  setOrientationConstraints();
   testOMPLProjectedStateSpaceConstruction();
 }
 
