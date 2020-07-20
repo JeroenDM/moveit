@@ -110,6 +110,10 @@ moveit_msgs::OrientationConstraint createOrientationConstraint(std::string& base
  *
  * All tests are implemented in a generic test fixture, so it is
  * easy to run them on different robots.
+ * 
+ * based on
+ * https://stackoverflow.com/questions/38207346/specify-constructor-arguments-for-a-google-test-fixture/38218657
+ * (answer by PiotrNycz)
  *
  * It is implemented this way to avoid the ros specific test framework
  * outside moveit_ros.
