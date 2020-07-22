@@ -68,10 +68,13 @@
 #include <ompl/geometric/planners/prm/LazyPRMstar.h>
 #include <ompl/geometric/planners/prm/SPARS.h>
 #include <ompl/geometric/planners/prm/SPARStwo.h>
+#include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
+#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
 #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
+#include <moveit/ompl_interface/detail/ompl_constraint.h>
 
 using namespace std::placeholders;
 
@@ -311,7 +314,7 @@ void ompl_interface::PlanningContextManager::setPlannerConfigurations(
 
 ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextManager::getPlanningContext(
     const planning_interface::PlannerConfigurationSettings& config,
-    const StateSpaceFactoryTypeSelector& factory_selector, const moveit_msgs::MotionPlanRequest& /*req*/) const
+    const StateSpaceFactoryTypeSelector& factory_selector, const moveit_msgs::MotionPlanRequest& req) const
 {
   const ompl_interface::ModelBasedStateSpaceFactoryPtr& factory = factory_selector(config.group);
 
@@ -343,8 +346,48 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     context_spec.constraint_sampler_manager_ = constraint_sampler_manager_;
     context_spec.state_space_ = factory->getNewStateSpace(space_spec);
 
-    // Choose the correct simple setup type to load
-    context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
+    // TODO (jeroendm)
+    // Read a configuration parameter to decide whether to use a ConstrainedStateSpace
+    // or a "normal" ModelBasedStateSpace.
+    // This selection should be moved to the other getPlanningContext method where the
+    // parameter "enforce_joint_model_state_space" is read, because this also influences
+    // whether we can use a ConstrainedStateSpace
+    // Choose wich state space to create
+    auto it = config.config.find("use_ompl_constraint_state_space");
+    if (it != config.config.end() && boost::lexical_cast<bool>(it->second))
+    {
+      ROS_DEBUG_NAMED("planning_context_manager", "Using OMPL's constrained state space for planning.");
+      context_spec.state_space_ = std::make_shared<ompl_interface::ConstrainedPlanningStateSpace>(space_spec);
+      // Create a specific child of ob::Constraint for the constraint state space
+      // \todo fixed x position constraints for now. Should be set based on req.path_constraints.
+      auto ompl_constraint = std::make_shared<PositionConstraint>(
+          robot_model_, config.group, robot_model_->getJointModelGroup(config.group)->getVariableCount());
+      ompl_constraint->init(req.path_constraints);
+
+      context_spec.constrained_state_space_ =
+          std::make_shared<ob::ProjectedStateSpace>(context_spec.state_space_, ompl_constraint);
+      context_spec.constrained_space_info_ =
+          std::make_shared<ob::ConstrainedSpaceInformation>(context_spec.constrained_state_space_);
+
+      context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.constrained_space_info_));
+
+      try
+      {
+        // context_spec.state_space_->sanityChecks();
+        context_spec.constrained_state_space_->sanityChecks();
+      }
+      catch (ompl::Exception& ex)
+      {
+        ROS_ERROR_NAMED("planning_context_manager", "OMPL sanity check encountered an error: %s", ex.what());
+      }
+    }
+    else
+    {
+      ROS_DEBUG_NAMED("planning_context_manager",
+                      "Using a default state space and rejection sampling for path constraints.");
+      // Choose the correct simple setup type to load
+      context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
+    }
 
     bool state_validity_cache = true;
     if (config.config.find("subspaces") != config.config.end())
@@ -392,7 +435,10 @@ const ompl_interface::ModelBasedStateSpaceFactoryPtr& ompl_interface::PlanningCo
 {
   auto f = factory_type.empty() ? state_space_factories_.begin() : state_space_factories_.find(factory_type);
   if (f != state_space_factories_.end())
+  {
+    ROS_DEBUG_NAMED("planning_context_manager", "Using '%s' parameterization for solving problem", f->first.c_str());
     return f->second;
+  }
   else
   {
     ROS_ERROR_NAMED("planning_context_manager", "Factory of type '%s' was not found", factory_type.c_str());
@@ -474,6 +520,15 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     }
   }
 
+  // bypass normal planning and use OMPL's constrained state space
+  auto it1 = pc->second.config.find("use_ompl_constraint_state_space");
+  bool use_ompl_constraint_state_space = false;
+  if (it1 != pc->second.config.end() && boost::lexical_cast<bool>(it1->second))
+  {
+    ROS_INFO_STREAM("Bypass the default state space and use OMPL's constrained state space.");
+    use_ompl_constraint_state_space = true;
+  }
+
   // Check if sampling in JointModelStateSpace is enforced for this group by user.
   // This is done by setting 'enforce_joint_model_state_space' to 'true' for the desired group in ompl_planning.yaml.
   //
@@ -507,12 +562,13 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     if (!context->setPathConstraints(req.path_constraints, &error_code))
       return ModelBasedPlanningContextPtr();
 
+    // the line below is where the simple stetup gets it's goal.
     if (!context->setGoalConstraints(req.goal_constraints, req.path_constraints, &error_code))
       return ModelBasedPlanningContextPtr();
 
     try
     {
-      context->configure(nh, use_constraints_approximation);
+      context->configure(nh, use_constraints_approximation, use_ompl_constraint_state_space);
       ROS_DEBUG_NAMED("planning_context_manager", "%s: New planning context is set.", context->getName().c_str());
       error_code.val = moveit_msgs::MoveItErrorCodes::SUCCESS;
     }
@@ -521,6 +577,11 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
       ROS_ERROR_NAMED("planning_context_manager", "OMPL encountered an error: %s", ex.what());
       context.reset();
     }
+  }
+
+  if (use_ompl_constraint_state_space)
+  {
+    context->setCheckPathConstraints(false);
   }
 
   return context;

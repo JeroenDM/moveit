@@ -45,6 +45,8 @@
 #include <ompl/tools/benchmark/Benchmark.h>
 #include <ompl/tools/multiplan/ParallelPlan.h>
 #include <ompl/base/StateStorage.h>
+#include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
+#include <ompl/base/ConstrainedSpaceInformation.h>
 
 namespace ompl_interface
 {
@@ -68,6 +70,8 @@ struct ModelBasedPlanningContextSpecification
   constraint_samplers::ConstraintSamplerManagerPtr constraint_sampler_manager_;
 
   ModelBasedStateSpacePtr state_space_;
+  ob::ConstrainedStateSpacePtr constrained_state_space_;
+  ob::ConstrainedSpaceInformationPtr constrained_space_info_;
   std::vector<ModelBasedStateSpacePtr> subspaces_;
   og::SimpleSetupPtr ompl_simple_setup_;  // pass in the correct simple setup type
 };
@@ -228,6 +232,8 @@ public:
     spec_.constraint_sampler_manager_ = csm;
   }
 
+  void setCheckPathConstraints(bool flag);
+
   void setVerboseStateValidityChecks(bool flag);
 
   void setProjectionEvaluator(const std::string& peval);
@@ -331,7 +337,8 @@ public:
    * approximations to */
   bool saveConstraintApproximations(const ros::NodeHandle& nh);
 
-  virtual void configure(const ros::NodeHandle& nh, bool use_constraints_approximations);
+  virtual void configure(const ros::NodeHandle& nh, bool use_constraints_approximations,
+                         bool use_ompl_constrained_planning);
 
 protected:
   void preSolve();

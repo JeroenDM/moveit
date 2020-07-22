@@ -189,8 +189,9 @@ void ompl_interface::ModelBasedStateSpace::enforceBounds(ompl::base::State* stat
 
 bool ompl_interface::ModelBasedStateSpace::satisfiesBounds(const ompl::base::State* state) const
 {
-  return spec_.joint_model_group_->satisfiesPositionBounds(state->as<StateType>()->values, spec_.joint_bounds_,
-                                                           std::numeric_limits<double>::epsilon());
+  return true;
+  // return spec_.joint_model_group_->satisfiesPositionBounds(state->as<StateType>()->values, spec_.joint_bounds_,
+  //                                                          std::numeric_limits<double>::epsilon());
 }
 
 void ompl_interface::ModelBasedStateSpace::interpolate(const ompl::base::State* from, const ompl::base::State* to,
