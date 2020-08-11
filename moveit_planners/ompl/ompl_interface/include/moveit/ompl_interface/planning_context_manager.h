@@ -1,43 +1,43 @@
 /*********************************************************************
-* Software License Agreement (BSD License)
-*
-*  Copyright (c) 2012, Willow Garage, Inc.
-*  All rights reserved.
-*
-*  Redistribution and use in source and binary forms, with or without
-*  modification, are permitted provided that the following conditions
-*  are met:
-*
-*   * Redistributions of source code must retain the above copyright
-*     notice, this list of conditions and the following disclaimer.
-*   * Redistributions in binary form must reproduce the above
-*     copyright notice, this list of conditions and the following
-*     disclaimer in the documentation and/or other materials provided
-*     with the distribution.
-*   * Neither the name of Willow Garage nor the names of its
-*     contributors may be used to endorse or promote products derived
-*     from this software without specific prior written permission.
-*
-*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-*  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-*  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-*  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-*  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-*  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-*  POSSIBILITY OF SUCH DAMAGE.
-*********************************************************************/
+ * Software License Agreement (BSD License)
+ *
+ *  Copyright (c) 2012, Willow Garage, Inc.
+ *  All rights reserved.
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *   * Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *   * Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the following
+ *     disclaimer in the documentation and/or other materials provided
+ *     with the distribution.
+ *   * Neither the name of Willow Garage nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ *********************************************************************/
 
 /* Author: Ioan Sucan */
 
 #pragma once
 
 #include <moveit/ompl_interface/model_based_planning_context.h>
-#include <moveit/ompl_interface/parameterization/model_based_state_space_factory.h>
+#include <moveit/ompl_interface/parameterization/model_based_state_space.h>
 #include <moveit/constraint_samplers/constraint_sampler_manager.h>
 #include <moveit/macros/class_forward.h>
 
@@ -188,43 +188,50 @@ public:
     known_planners_[planner_id] = pa;
   }
 
-  void registerStateSpaceFactory(const ModelBasedStateSpaceFactoryPtr& factory)
-  {
-    state_space_factories_[factory->getType()] = factory;
-  }
-
   const std::map<std::string, ConfiguredPlannerAllocator>& getRegisteredPlannerAllocators() const
   {
     return known_planners_;
   }
 
-  const std::map<std::string, ModelBasedStateSpaceFactoryPtr>& getRegisteredStateSpaceFactories() const
-  {
-    return state_space_factories_;
-  }
-
   ConfiguredPlannerSelector getPlannerSelector() const;
 
 protected:
-  typedef std::function<const ModelBasedStateSpaceFactoryPtr&(const std::string&)> StateSpaceFactoryTypeSelector;
-
   ConfiguredPlannerAllocator plannerSelector(const std::string& planner) const;
 
   void registerDefaultPlanners();
-  void registerDefaultStateSpaces();
 
   template <typename T>
   void registerPlannerAllocatorHelper(const std::string& planner_id);
 
   /** \brief This is the function that constructs new planning contexts if no previous ones exist that are suitable */
   ModelBasedPlanningContextPtr getPlanningContext(const planning_interface::PlannerConfigurationSettings& config,
-                                                  const StateSpaceFactoryTypeSelector& factory_selector,
+                                                  const std::string& state_space_parameterization_type,
                                                   const moveit_msgs::MotionPlanRequest& req) const;
 
-  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory1(const std::string& group_name,
-                                                              const std::string& factory_type) const;
-  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory2(const std::string& group_name,
-                                                              const moveit_msgs::MotionPlanRequest& req) const;
+  /** \brief Check whether a joint model group has an inverse kinematics solver available. **/
+  bool doesGroupHaveIKSolver(const std::string& group_name) const;
+
+  /** \brief Get as suitable parameterization type of a given planning problem (joint space or Cartesian space).
+   *
+   * \param enforce_joint_model_state_space The user can enforce joint space parameterization. This is done by setting
+   * 'enforce_joint_model_state_space' to 'true' for the desired group in ompl_planning.yaml.
+   *
+   * Why would you use this feature? Some planning problems like orientation path constraints are represented in
+   * PoseModelStateSpace and sampled via IK. However consecutive IK solutions are not checked for proximity at the
+   * moment and sometimes happen to be flipped, leading to invalid trajectories. This workaround lets the user prevent
+   * this problem by forcing rejection sampling in JointModelStateSpace.
+   * */
+  const std::string& selectStateSpaceType(const moveit_msgs::MotionPlanRequest& req,
+                                          bool enforce_joint_model_state_space = false) const;
+
+  /** \Brief Create a state space of the given parameterization type using the specifications.
+   *
+   * Supported parameterization types are:
+   * - JointModelStateSpace::PARAMETERIZATION_TYPE for joint space parameterization.
+   * - PoseModelStateSpace::PARAMETERIZATION_TYPE for Cartesian space parameterization.
+  */
+  ModelBasedStateSpacePtr createStateSpace(const std::string& parameterization_type,
+                                           const ModelBasedStateSpaceSpecification& space_spec) const;
 
   /** \brief The kinematic model for which motion plans are computed */
   moveit::core::RobotModelConstPtr robot_model_;
@@ -232,7 +239,6 @@ protected:
   constraint_samplers::ConstraintSamplerManagerPtr constraint_sampler_manager_;
 
   std::map<std::string, ConfiguredPlannerAllocator> known_planners_;
-  std::map<std::string, ModelBasedStateSpaceFactoryPtr> state_space_factories_;
 
   /** \brief All the existing planning configurations. The name
       of the configuration is the key of the map. This name can

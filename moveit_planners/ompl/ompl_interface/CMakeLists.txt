@@ -5,11 +5,8 @@ add_library(${MOVEIT_LIB_NAME}
   src/planning_context_manager.cpp
   src/model_based_planning_context.cpp
   src/parameterization/model_based_state_space.cpp
-  src/parameterization/model_based_state_space_factory.cpp
   src/parameterization/joint_space/joint_model_state_space.cpp
-  src/parameterization/joint_space/joint_model_state_space_factory.cpp
   src/parameterization/work_space/pose_model_state_space.cpp
-  src/parameterization/work_space/pose_model_state_space_factory.cpp
   src/detail/threadsafe_state_storage.cpp
   src/detail/state_validity_checker.cpp
   src/detail/projection_evaluators.cpp
@@ -46,9 +43,17 @@ install(DIRECTORY include/ DESTINATION ${CATKIN_GLOBAL_INCLUDE_DESTINATION})
 
 if(CATKIN_ENABLE_TESTING)
   find_package(moveit_resources REQUIRED)
+  find_package(rostest REQUIRED)
+
   include_directories(${moveit_resources_INCLUDE_DIRS})
 
   catkin_add_gtest(test_state_space test/test_state_space.cpp)
   target_link_libraries(test_state_space ${MOVEIT_LIB_NAME} ${OMPL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
   set_target_properties(test_state_space PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
+
+  add_rostest_gtest(test_planning_context_manager
+    test/test_planning_context_manager.test
+    test/test_planning_context_manager.cpp)
+  target_link_libraries(test_planning_context_manager ${MOVEIT_LIB_NAME} ${OMPL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+  set_target_properties(test_planning_context_manager PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
 endif()

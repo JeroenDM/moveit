@@ -67,9 +67,8 @@
 #include <ompl/geometric/planners/prm/SPARS.h>
 #include <ompl/geometric/planners/prm/SPARStwo.h>
 
-#include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
 #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
-#include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
+#include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space.h>
 
 using namespace std::placeholders;
 
@@ -236,7 +235,6 @@ ompl_interface::PlanningContextManager::PlanningContextManager(moveit::core::Rob
 {
   cached_contexts_.reset(new CachedContexts());
   registerDefaultPlanners();
-  registerDefaultStateSpaces();
 }
 
 ompl_interface::PlanningContextManager::~PlanningContextManager() = default;
@@ -292,12 +290,6 @@ void ompl_interface::PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocatorHelper<og::TRRT>("geometric::TRRT");
 }
 
-void ompl_interface::PlanningContextManager::registerDefaultStateSpaces()
-{
-  registerStateSpaceFactory(ModelBasedStateSpaceFactoryPtr(new JointModelStateSpaceFactory()));
-  registerStateSpaceFactory(ModelBasedStateSpaceFactoryPtr(new PoseModelStateSpaceFactory()));
-}
-
 ompl_interface::ConfiguredPlannerSelector ompl_interface::PlanningContextManager::getPlannerSelector() const
 {
   return std::bind(&PlanningContextManager::plannerSelector, this, std::placeholders::_1);
@@ -311,16 +303,15 @@ void ompl_interface::PlanningContextManager::setPlannerConfigurations(
 
 ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextManager::getPlanningContext(
     const planning_interface::PlannerConfigurationSettings& config,
-    const StateSpaceFactoryTypeSelector& factory_selector, const moveit_msgs::MotionPlanRequest& /*req*/) const
+    const std::string& state_space_parameterization_type, const moveit_msgs::MotionPlanRequest& req) const
 {
-  const ompl_interface::ModelBasedStateSpaceFactoryPtr& factory = factory_selector(config.group);
-
   // Check for a cached planning context
   ModelBasedPlanningContextPtr context;
 
   {
     std::unique_lock<std::mutex> slock(cached_contexts_->lock_);
-    auto cached_contexts = cached_contexts_->contexts_.find(std::make_pair(config.name, factory->getType()));
+    auto cached_contexts =
+        cached_contexts_->contexts_.find(std::make_pair(config.name, state_space_parameterization_type));
     if (cached_contexts != cached_contexts_->contexts_.end())
     {
       for (const ModelBasedPlanningContextPtr& cached_context : cached_contexts->second)
@@ -341,16 +332,14 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
     context_spec.config_ = config.config;
     context_spec.planner_selector_ = getPlannerSelector();
     context_spec.constraint_sampler_manager_ = constraint_sampler_manager_;
-    context_spec.state_space_ = factory->getNewStateSpace(space_spec);
-
-    // Choose the correct simple setup type to load
+    context_spec.state_space_ = createStateSpace(state_space_parameterization_type, space_spec);
     context_spec.ompl_simple_setup_.reset(new ompl::geometric::SimpleSetup(context_spec.state_space_));
 
     ROS_DEBUG_NAMED(LOGNAME, "Creating new planning context");
     context.reset(new ModelBasedPlanningContext(config.name, context_spec));
     {
       std::unique_lock<std::mutex> slock(cached_contexts_->lock_);
-      cached_contexts_->contexts_[std::make_pair(config.name, factory->getType())].push_back(context);
+      cached_contexts_->contexts_[std::make_pair(config.name, state_space_parameterization_type)].push_back(context);
     }
   }
 
@@ -367,47 +356,92 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
   return context;
 }
 
-const ompl_interface::ModelBasedStateSpaceFactoryPtr& ompl_interface::PlanningContextManager::getStateSpaceFactory1(
-    const std::string& /* dummy */, const std::string& factory_type) const
+bool ompl_interface::PlanningContextManager::doesGroupHaveIKSolver(const std::string& group_name) const
 {
-  auto f = factory_type.empty() ? state_space_factories_.begin() : state_space_factories_.find(factory_type);
-  if (f != state_space_factories_.end())
-    return f->second;
+  const moveit::core::JointModelGroup* jmg = robot_model_->getJointModelGroup(group_name);
+  if (jmg)
+  {
+    const std::pair<moveit::core::JointModelGroup::KinematicsSolver,
+                    moveit::core::JointModelGroup::KinematicsSolverMap>& ik_solver_pair = jmg->getGroupKinematics();
+    bool ik = false;
+    // check that we have a direct means to compute IK
+    if (ik_solver_pair.first)
+    {
+      ik = jmg->getVariableCount() == ik_solver_pair.first.bijection_.size();
+    }
+    // or an IK solver for each of the subgroups
+    else if (!ik_solver_pair.second.empty())
+    {
+      unsigned int variable_count = 0;
+      unsigned int bijection_count = 0;
+      for (const auto& jt : ik_solver_pair.second)
+      {
+        variable_count += jt.first->getVariableCount();
+        bijection_count += jt.second.bijection_.size();
+      }
+      if (variable_count == jmg->getVariableCount() && variable_count == bijection_count)
+        ik = true;
+    }
+    return ik;
+  }
   else
   {
-    ROS_ERROR_NAMED(LOGNAME, "Factory of type '%s' was not found", factory_type.c_str());
-    static const ModelBasedStateSpaceFactoryPtr EMPTY;
-    return EMPTY;
+    ROS_ERROR_NAMED("planning_context_manager", "planning group '%s' not found when testing for IK Solver.",
+                    group_name.c_str());
+    return false;
   }
 }
 
-const ompl_interface::ModelBasedStateSpaceFactoryPtr& ompl_interface::PlanningContextManager::getStateSpaceFactory2(
-    const std::string& group, const moveit_msgs::MotionPlanRequest& req) const
+const std::string& ompl_interface::PlanningContextManager::selectStateSpaceType(
+    const moveit_msgs::MotionPlanRequest& req, bool enforce_joint_model_state_space) const
 {
-  // find the problem representation to use
-  auto best = state_space_factories_.end();
-  int prev_priority = 0;
-  for (auto it = state_space_factories_.begin(); it != state_space_factories_.end(); ++it)
+  // the user forced us to plan in joint space
+  if (enforce_joint_model_state_space)
   {
-    int priority = it->second->canRepresentProblem(group, req, robot_model_);
-    if (priority > prev_priority)
-    {
-      best = it;
-      prev_priority = priority;
-    }
+    return ompl_interface::JointModelStateSpace::PARAMETERIZATION_TYPE;
   }
 
-  if (best == state_space_factories_.end())
+  // if there are joint or visibility constraints, we need to plan in joint space
+  else if (!req.path_constraints.joint_constraints.empty() && !req.path_constraints.visibility_constraints.empty())
   {
-    ROS_ERROR_NAMED(LOGNAME, "There are no known state spaces that can represent the given planning "
-                             "problem");
-    static const ModelBasedStateSpaceFactoryPtr EMPTY;
-    return EMPTY;
+    return ompl_interface::JointModelStateSpace::PARAMETERIZATION_TYPE;
+  }
+
+  // if we have path constraints and an inverse kinematics solver, we prefer interpolating in pose space
+  else if ((!req.path_constraints.position_constraints.empty() ||
+            !req.path_constraints.orientation_constraints.empty()) &&
+           doesGroupHaveIKSolver(req.group_name))
+  {
+    return ompl_interface::PoseModelStateSpace::PARAMETERIZATION_TYPE;
+  }
+  // in all other cases, plan in joint space
+  else
+  {
+    return ompl_interface::JointModelStateSpace::PARAMETERIZATION_TYPE;
+  }
+}
+
+ompl_interface::ModelBasedStateSpacePtr ompl_interface::PlanningContextManager::createStateSpace(
+    const std::string& parameterization_type, const ModelBasedStateSpaceSpecification& space_spec) const
+{
+  ompl_interface::ModelBasedStateSpacePtr state_space;
+  if (parameterization_type == ompl_interface::JointModelStateSpace::PARAMETERIZATION_TYPE)
+  {
+    state_space = std::make_shared<ompl_interface::JointModelStateSpace>(space_spec);
+    state_space->computeLocations();
+    return state_space;
+  }
+  else if (parameterization_type == ompl_interface::PoseModelStateSpace::PARAMETERIZATION_TYPE)
+  {
+    state_space = std::make_shared<ompl_interface::PoseModelStateSpace>(space_spec);
+    state_space->computeLocations();
+    return state_space;
   }
   else
   {
-    ROS_DEBUG_NAMED(LOGNAME, "Using '%s' parameterization for solving problem", best->first.c_str());
-    return best->second;
+    ROS_ERROR_NAMED(LOGNAME, "Unkown state space parameterization type '%s'. No state space created.",
+                    parameterization_type.c_str());
+    return ompl_interface::ModelBasedStateSpacePtr();
   }
 }
 
@@ -456,20 +490,19 @@ ompl_interface::ModelBasedPlanningContextPtr ompl_interface::PlanningContextMana
   // Check if sampling in JointModelStateSpace is enforced for this group by user.
   // This is done by setting 'enforce_joint_model_state_space' to 'true' for the desired group in ompl_planning.yaml.
   //
-  // Some planning problems like orientation path constraints are represented in PoseModelStateSpace and sampled via IK.
-  // However consecutive IK solutions are not checked for proximity at the moment and sometimes happen to be flipped,
-  // leading to invalid trajectories. This workaround lets the user prevent this problem by forcing rejection sampling
-  // in JointModelStateSpace.
-  StateSpaceFactoryTypeSelector factory_selector;
+  // Some planning problems like orientation path constraints are represented in PoseModelStateSpace and sampled via
+  // IK. However consecutive IK solutions are not checked for proximity at the moment and sometimes happen to be
+  // flipped, leading to invalid trajectories. This workaround lets the user prevent this problem by forcing rejection
+  // sampling in JointModelStateSpace.
+  bool enforce_joint_model_state_space = false;
   auto it = pc->second.config.find("enforce_joint_model_state_space");
-
   if (it != pc->second.config.end() && boost::lexical_cast<bool>(it->second))
-    factory_selector = std::bind(&PlanningContextManager::getStateSpaceFactory1, this, std::placeholders::_1,
-                                 JointModelStateSpace::PARAMETERIZATION_TYPE);
-  else
-    factory_selector = std::bind(&PlanningContextManager::getStateSpaceFactory2, this, std::placeholders::_1, req);
+  {
+    enforce_joint_model_state_space = true;
+  }
 
-  ModelBasedPlanningContextPtr context = getPlanningContext(pc->second, factory_selector, req);
+  const std::string state_space_type = selectStateSpaceType(req, enforce_joint_model_state_space);
+  ModelBasedPlanningContextPtr context = getPlanningContext(pc->second, state_space_type, req);
 
   if (context)
   {
