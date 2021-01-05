@@ -631,7 +631,7 @@ public:
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupPositions(const std::string& joint_group_name, const Eigen::VectorXd& values)
+  void setJointGroupPositions(const std::string& joint_group_name, const Eigen::Ref<const Eigen::VectorXd> values)
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -640,7 +640,7 @@ public:
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupPositions(const JointModelGroup* group, const Eigen::VectorXd& values);
+  void setJointGroupPositions(const JointModelGroup* group, const Eigen::Ref<const Eigen::VectorXd> values);
 
   /** \brief For a given group, copy the position values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
@@ -682,7 +682,7 @@ public:
   /** \brief For a given group, copy the position values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
    * RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupPositions(const std::string& joint_group_name, Eigen::VectorXd& values) const
+  void copyJointGroupPositions(const std::string& joint_group_name, Eigen::Ref<Eigen::VectorXd> values) const
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -692,7 +692,7 @@ public:
   /** \brief For a given group, copy the position values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
    * RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupPositions(const JointModelGroup* group, Eigen::VectorXd& values) const;
+  void copyJointGroupPositions(const JointModelGroup* group, Eigen::Ref<Eigen::VectorXd> values) const;
 
   /** @} */
 
@@ -731,7 +731,7 @@ public:
 
   /** \brief Given velocities for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupVelocities(const std::string& joint_group_name, const Eigen::VectorXd& values)
+  void setJointGroupVelocities(const std::string& joint_group_name, const Eigen::Ref<const Eigen::VectorXd> values)
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -740,7 +740,7 @@ public:
 
   /** \brief Given velocities for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupVelocities(const JointModelGroup* group, const Eigen::VectorXd& values);
+  void setJointGroupVelocities(const JointModelGroup* group, const Eigen::Ref<const Eigen::VectorXd> values);
 
   /** \brief For a given group, copy the velocity values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
@@ -782,7 +782,7 @@ public:
   /** \brief For a given group, copy the velocity values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
    * RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupVelocities(const std::string& joint_group_name, Eigen::VectorXd& values) const
+  void copyJointGroupVelocities(const std::string& joint_group_name, Eigen::Ref<Eigen::VectorXd> values) const
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -792,7 +792,7 @@ public:
   /** \brief For a given group, copy the velocity values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
    * RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupVelocities(const JointModelGroup* group, Eigen::VectorXd& values) const;
+  void copyJointGroupVelocities(const JointModelGroup* group, Eigen::Ref<Eigen::VectorXd> values) const;
 
   /** @} */
 
@@ -831,7 +831,7 @@ public:
 
   /** \brief Given accelerations for the variables that make up a group, in the order found in the group (including
    *   values of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupAccelerations(const std::string& joint_group_name, const Eigen::VectorXd& values)
+  void setJointGroupAccelerations(const std::string& joint_group_name, const Eigen::Ref<const Eigen::VectorXd> values)
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -840,7 +840,7 @@ public:
 
   /** \brief Given accelerations for the variables that make up a group, in the order found in the group (including
    *   values of mimic joints), set those as the new values that correspond to the group */
-  void setJointGroupAccelerations(const JointModelGroup* group, const Eigen::VectorXd& values);
+  void setJointGroupAccelerations(const JointModelGroup* group, const Eigen::Ref<const Eigen::VectorXd> values);
 
   /** \brief For a given group, copy the acceleration values of the variables that make up the group into another
    * location, in the order that the variables are found in the group. This is not necessarily a contiguous block of
@@ -882,7 +882,7 @@ public:
   /** \brief For a given group, copy the acceleration values of the variables that make up the group into another
    * location, in the order that the variables are found in the group. This is not necessarily a contiguous block of
    * memory in the RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupAccelerations(const std::string& joint_group_name, Eigen::VectorXd& values) const
+  void copyJointGroupAccelerations(const std::string& joint_group_name, Eigen::Ref<Eigen::VectorXd> values) const
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
@@ -892,7 +892,7 @@ public:
   /** \brief For a given group, copy the acceleration values of the variables that make up the group into another
    * location, in the order that the variables are found in the group. This is not necessarily a contiguous block of
    * memory in the RobotState itself, so we copy instead of returning a pointer.*/
-  void copyJointGroupAccelerations(const JointModelGroup* group, Eigen::VectorXd& values) const;
+  void copyJointGroupAccelerations(const JointModelGroup* group, Eigen::Ref<Eigen::VectorXd> values) const;
 
   /** @} */
 
@@ -1084,7 +1084,8 @@ public:
    * @param dt a time interval (seconds)
    * @param st a secondary task computation function
    */
-  bool setFromDiffIK(const JointModelGroup* group, const Eigen::VectorXd& twist, const std::string& tip, double dt,
+  bool setFromDiffIK(const JointModelGroup* group, const Eigen::Ref<const Eigen::VectorXd> twist,
+                     const std::string& tip, double dt,
                      const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn());
 
   /** \brief Set the joint values from a Cartesian velocity applied during a time dt
@@ -1222,13 +1223,13 @@ public:
 
   /** \brief Given a twist for a particular link (\e tip), compute the corresponding velocity for every variable and
    * store it in \e qdot */
-  void computeVariableVelocity(const JointModelGroup* jmg, Eigen::VectorXd& qdot, const Eigen::VectorXd& twist,
-                               const LinkModel* tip) const;
+  void computeVariableVelocity(const JointModelGroup* jmg, Eigen::Ref<Eigen::VectorXd> qdot,
+                               const Eigen::Ref<const Eigen::VectorXd> twist, const LinkModel* tip) const;
 
   /** \brief Given a twist for a particular link (\e tip), compute the corresponding velocity for every variable and
    * store it in \e qdot */
-  void computeVariableVelocity(const JointModelGroup* jmg, Eigen::VectorXd& qdot, const Eigen::VectorXd& twist,
-                               const LinkModel* tip)
+  void computeVariableVelocity(const JointModelGroup* jmg, Eigen::Ref<Eigen::VectorXd> qdot,
+                               const Eigen::Ref<const Eigen::VectorXd> twist, const LinkModel* tip)
   {
     updateLinkTransforms();
     static_cast<const RobotState*>(this)->computeVariableVelocity(jmg, qdot, twist, tip);
@@ -1237,7 +1238,7 @@ public:
   /** \brief Given the velocities for the variables in this group (\e qdot) and an amount of time (\e dt),
       update the current state using the Euler forward method. If the constraint specified is satisfied, return true,
      otherwise return false. */
-  bool integrateVariableVelocity(const JointModelGroup* jmg, const Eigen::VectorXd& qdot, double dt,
+  bool integrateVariableVelocity(const JointModelGroup* jmg, const Eigen::Ref<const Eigen::VectorXd> qdot, double dt,
                                  const GroupStateValidityCallbackFn& constraint = GroupStateValidityCallbackFn());
 
   /** @} */

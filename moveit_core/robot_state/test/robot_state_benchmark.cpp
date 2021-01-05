@@ -95,7 +95,7 @@ public:
 
 TEST_F(Timing, stateUpdate)
 {
-  moveit::core::RobotModelPtr model = moveit::core::loadTestingRobotModel("pr2_description");
+  moveit::core::RobotModelPtr model = moveit::core::loadTestingRobotModel("pr2");
   ASSERT_TRUE(bool(model));
   moveit::core::RobotState state(model);
   ScopedTimer t("RobotState updates: ");
@@ -103,6 +103,21 @@ TEST_F(Timing, stateUpdate)
   {
     state.setToRandomPositions();
     state.update();
+  }
+}
+
+TEST_F(Timing, stateCopy)
+{
+  moveit::core::RobotModelPtr model = moveit::core::loadTestingRobotModel("fanuc");
+  ASSERT_TRUE(bool(model));
+  moveit::core::RobotState state(model);
+  moveit::core::JointModelGroup* jmg(model->getJointModelGroup("manipulator"));
+  ScopedTimer t("Copy state to Eigen vector: ");
+  Eigen::VectorXd joint_positions(6);
+  for (unsigned i = 0; i < 1e5; ++i)
+  {
+    state.setToRandomPositions();
+    state.copyJointGroupPositions(jmg, joint_positions);
   }
 }
 
