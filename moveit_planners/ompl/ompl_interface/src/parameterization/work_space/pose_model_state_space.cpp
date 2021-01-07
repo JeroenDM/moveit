@@ -133,16 +133,63 @@ void ompl_interface::PoseModelStateSpace::interpolate(const ompl::base::State* f
   // we want to interpolate in Cartesian space; we do not have a guarantee that from and to
   // have their poses computed, but this is very unlikely to happen (depends how the planner gets its input states)
 
-  // interpolate in joint space
-  ModelBasedStateSpace::interpolate(from, to, t, state);
+  // quick and dirty hack, an extra interpolation loop
+  // instead of using the interpolation in joint space as a seed state for inverse kinematics,
+  // we start with the "from" state and slowly move towards the interpolated state
+  // using the previous state as a seed for the next one
+  // (As is done in computeCartesianPath)
 
-  // interpolate SE3 components
-  for (std::size_t i = 0; i < poses_.size(); ++i)
-    poses_[i].state_space_->interpolate(from->as<StateType>()->poses[i], to->as<StateType>()->poses[i], t,
-                                        state->as<StateType>()->poses[i]);
+  // state and from could point to the same memory
+  // which would make all code below questionable
+  if (state != from)
+  {
+    copyState(state, from);
+  }
+  else
+  {
+    ROS_ERROR_NAMED(LOGNAME, "from == state");
+    return;
+  }
 
-  // the call above may reset all flags for state; but we know the pose we want flag should be set
-  state->as<StateType>()->setPoseComputed(true);
+  const unsigned int num_steps{ 10 };
+  for (unsigned int step{ 1 }; step <= num_steps; ++step)
+  {
+    double t_mod = (double)step / (double)num_steps * t;
+    if (t == 1.0)
+      std::cout << "### T == 1\n";
+    std::cout << "t: " << t << "t_mod: " << t_mod << "\n";
+
+    // interpolate in joint space
+    // ModelBasedStateSpace::interpolate(from, to, t_mod, state);
+
+    // interpolate SE3 components
+    for (std::size_t i = 0; i < poses_.size(); ++i)
+    {
+      poses_[i].state_space_->interpolate(from->as<StateType>()->poses[i], to->as<StateType>()->poses[i], t_mod,
+                                          state->as<StateType>()->poses[i]);
+
+      // auto pose_from = from->as<StateType>()->poses[i];
+      // auto pose_t = state->as<StateType>()->poses[i];
+
+      // Eigen::Vector3d p_from, p_t;
+      // p_from << pose_from->getX(), pose_from->getY(), pose_from->getZ();
+      // p_t << pose_t->getX(), pose_t->getY(), pose_t->getZ();
+      // std::cout << (p_t - p_from).transpose().squaredNorm() << "\n";
+    }
+
+    // the call above may reset all flags for state; but we know the pose we want flag should be set
+    state->as<StateType>()->setPoseComputed(true);
+
+    // reset the state from the previous run
+    state->as<StateType>()->setJointsComputed(false);
+
+    // give up if inverse kinematics fails
+    if (!computeStateIK(state))
+    {
+      ROS_ERROR_NAMED(LOGNAME, "Early break when interpolating states.");
+      break;
+    }
+  }
 
   /*
   std::cout << "*********** interpolate\n";
@@ -151,19 +198,21 @@ void ompl_interface::PoseModelStateSpace::interpolate(const ompl::base::State* f
   printState(state, std::cout);
   std::cout << "\n\n";
   */
+  // debugging stuff
+  // std::cout << "t: " << t << "\n";
 
-  // after interpolation we cannot be sure about the joint values (we use them as seed only)
-  // so we recompute IK if needed
-  if (computeStateIK(state))
-  {
-    double dj = jump_factor_ * ModelBasedStateSpace::distance(from, to);
-    double d_from = ModelBasedStateSpace::distance(from, state);
-    double d_to = ModelBasedStateSpace::distance(state, to);
+  // // after interpolation we cannot be sure about the joint values (we use them as seed only)
+  // // so we recompute IK if needed
+  // if (computeStateIK(state))
+  // {
+  //   double dj = jump_factor_ * ModelBasedStateSpace::distance(from, to);
+  //   double d_from = ModelBasedStateSpace::distance(from, state);
+  //   double d_to = ModelBasedStateSpace::distance(state, to);
 
-    // if the joint value jumped too much
-    if (d_from + d_to > std::max(0.2, dj))  // \todo make 0.2 a param
-      state->as<StateType>()->markInvalid();
-  }
+  //   // if the joint value jumped too much
+  //   if (d_from + d_to > std::max(0.2, dj))  // \todo make 0.2 a param
+  //     state->as<StateType>()->markInvalid();
+  // }
 }
 
 void ompl_interface::PoseModelStateSpace::setPlanningVolume(double minX, double maxX, double minY, double maxY,
