@@ -25,7 +25,6 @@
   <depend>eigen</depend>
   <depend>bullet</depend>
   <depend>eigen_stl_containers</depend>
-  <depend>eigen_conversions</depend>
   <depend condition="$ROS_DISTRO != noetic">libfcl-dev</depend>
   <depend condition="$ROS_DISTRO == noetic">fcl</depend>
   <depend version_gte="0.5.2">geometric_shapes</depend>
@@ -38,6 +37,7 @@
   <depend>moveit_msgs</depend>
   <depend>octomap</depend>
   <depend>octomap_msgs</depend>
+  <depend>pybind11_catkin</depend>
   <depend>random_numbers</depend>
   <depend>roslib</depend>
   <depend>rostime</depend>

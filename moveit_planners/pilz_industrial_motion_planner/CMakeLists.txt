@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.1.3)
 project(pilz_industrial_motion_planner)
 
 ## Add support for C++11, supported in ROS Kinetic and newer
@@ -8,8 +8,7 @@ add_definitions(-Wextra)
 add_definitions(-Wno-unused-parameter)
 
 find_package(catkin REQUIRED COMPONENTS
-  eigen_conversions
-  kdl_conversions
+  joint_limits_interface
   moveit_core
   moveit_msgs
   moveit_ros_move_group
@@ -339,7 +338,7 @@ if(CATKIN_ENABLE_TESTING)
     test/unittest_velocity_profile_atrap.cpp
     src/velocity_profile_atrap.cpp
   )
-  target_link_libraries(unittest_velocity_profile_atrap 
+  target_link_libraries(unittest_velocity_profile_atrap
     ${catkin_LIBRARIES}
   )
 
@@ -502,7 +501,7 @@ if(CATKIN_ENABLE_TESTING)
   catkin_add_gmock(unittest_get_solver_tip_frame
     test/unittest_get_solver_tip_frame.cpp
   )
-  target_link_libraries(unittest_get_solver_tip_frame 
+  target_link_libraries(unittest_get_solver_tip_frame
     ${catkin_LIBRARIES}
   )
 

@@ -13,8 +13,7 @@
 
 - We develop latest features on ``master``.
 - The ``*-devel`` branches correspond to released and stable versions of MoveIt for specific distributions of ROS.
-- Bug fixes occationally get backported to these released versions of MoveIt.
-- The next version of MoveIt 1.0 will be branched to ``noetic-devel`` around June 2020.
+- Bug fixes occasionally get backported to these released versions of MoveIt.
 - For MoveIt 2 development, see [moveit2](https://github.com/ros-planning/moveit2).
 
 ## MoveIt Status
@@ -23,8 +22,9 @@
 
 service    | Kinetic | Melodic | Master
 ---------- | ------- | ------- | ------
-Travis     | [![Build Status](https://travis-ci.com/ros-planning/moveit.svg?branch=kinetic-devel)](https://travis-ci.com/ros-planning/moveit/branches) | [![Build Status](https://travis-ci.com/ros-planning/moveit.svg?branch=melodic-devel)](https://travis-ci.com/ros-planning/moveit/branches) | [![Build Status](https://travis-ci.com/ros-planning/moveit.svg?branch=master)](https://travis-ci.com/ros-planning/moveit/branches) |
-build farm | [![Build Status](http://build.ros.org/buildStatus/icon?job=Kdev__moveit__ubuntu_xenial_amd64)](http://build.ros.org/job/Kdev__moveit__ubuntu_xenial_amd64) | [![Build Status](http://build.ros.org/buildStatus/icon?job=Mdev__moveit__ubuntu_bionic_amd64)](http://build.ros.org/job/Mdev__moveit__ubuntu_bionic_amd64) | N/A |
+GitHub | [![Format](https://github.com/ros-planning/moveit/actions/workflows/format.yml/badge.svg?branch=kinetic-devel)](https://github.com/ros-planning/moveit/actions/workflows/format.yml?branch=kinetic-devel) [![BuildAndTest](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml/badge.svg?branch=kinetic-devel)](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml?branch=kinetic-devel) | [![Format](https://github.com/ros-planning/moveit/actions/workflows/format.yml/badge.svg?branch=melodic-devel)](https://github.com/ros-planning/moveit/actions/workflows/format.yml?branch=melodic-devel) [![BuildAndTest](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml/badge.svg?branch=melodic-devel)](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml?branch=melodic-devel) | [![Format](https://github.com/ros-planning/moveit/actions/workflows/format.yml/badge.svg?branch=master)](https://github.com/ros-planning/moveit/actions/workflows/format.yml?branch=master) [![BuildAndTest](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml/badge.svg?branch=master)](https://github.com/ros-planning/moveit/actions/workflows/industrial_ci_action.yml?branch=master) |
+CodeCov | [![codecov](https://codecov.io/gh/ros-planning/moveit/branch/kinetic-devel/graph/badge.svg?token=W7uHKcY0ly)](https://codecov.io/gh/ros-planning/moveit) | [![codecov](https://codecov.io/gh/ros-planning/moveit/branch/melodic-devel/graph/badge.svg?token=W7uHKcY0ly)](https://codecov.io/gh/ros-planning/moveit) | [![codecov](https://codecov.io/gh/ros-planning/moveit/branch/master/graph/badge.svg?token=W7uHKcY0ly)](https://codecov.io/gh/ros-planning/moveit) |
+build farm | [![Build Status](http://build.ros.org/buildStatus/icon?job=Kdev__moveit__ubuntu_xenial_amd64)](http://build.ros.org/job/Kdev__moveit__ubuntu_xenial_amd64) | [![Build Status](http://build.ros.org/buildStatus/icon?job=Mdev__moveit__ubuntu_bionic_amd64)](http://build.ros.org/job/Mdev__moveit__ubuntu_bionic_amd64) | [![Build Status](http://build.ros.org/buildStatus/icon?job=Ndev__moveit__ubuntu_focal_amd64)](https://build.ros.org/job/Ndev__moveit__ubuntu_focal_amd64/) |
 
 ### Licenses
 

@@ -615,13 +615,17 @@ public:
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
+    {
+      assert(gstate.size() == jmg->getVariableCount());
       setJointGroupPositions(jmg, &gstate[0]);
+    }
   }
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
   void setJointGroupPositions(const JointModelGroup* group, const std::vector<double>& gstate)
   {
+    assert(gstate.size() == group->getVariableCount());
     setJointGroupPositions(group, &gstate[0]);
   }
 
@@ -635,12 +639,51 @@ public:
   {
     const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
     if (jmg)
+    {
+      assert(values.size() == jmg->getVariableCount());
       setJointGroupPositions(jmg, values);
+    }
   }
 
   /** \brief Given positions for the variables that make up a group, in the order found in the group (including values
    *   of mimic joints), set those as the new values that correspond to the group */
   void setJointGroupPositions(const JointModelGroup* group, const Eigen::VectorXd& values);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const JointModelGroup* group, const std::vector<double>& gstate);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const std::string& joint_group_name, const std::vector<double>& gstate)
+  {
+    const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
+    if (jmg)
+    {
+      assert(gstate.size() == jmg->getActiveVariableCount());
+      setJointGroupActivePositions(jmg, gstate);
+    }
+  }
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const JointModelGroup* group, const Eigen::VectorXd& values);
+
+  /** \brief Given positions for the variables of active joints that make up a group,
+   * in the order found in the group (excluding values of mimic joints), set those
+   * as the new values that correspond to the group */
+  void setJointGroupActivePositions(const std::string& joint_group_name, const Eigen::VectorXd& values)
+  {
+    const JointModelGroup* jmg = robot_model_->getJointModelGroup(joint_group_name);
+    if (jmg)
+    {
+      assert(values.size() == jmg->getActiveVariableCount());
+      setJointGroupActivePositions(jmg, values);
+    }
+  }
 
   /** \brief For a given group, copy the position values of the variables that make up the group into another location,
    * in the order that the variables are found in the group. This is not necessarily a contiguous block of memory in the
@@ -899,22 +942,6 @@ public:
   /** \name Setting from Inverse Kinematics
    *  @{
    */
-
-  /**
-   * \brief Convert the frame of reference of the pose to that same frame as the IK solver expects
-   * @param pose - the input to change
-   * @param solver - a kin solver whose base frame is important to us
-   * @return true if no error
-   */
-  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const kinematics::KinematicsBaseConstPtr& solver);
-
-  /**
-   * \brief Convert the frame of reference of the pose to that same frame as the IK solver expects
-   * @param pose - the input to change
-   * @param ik_frame - the name of frame of reference of base of ik solver
-   * @return true if no error
-   */
-  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const std::string& ik_frame);
 
   /** \brief If the group this state corresponds to is a chain and a solver is available, then the joint values can be
      set by computing inverse kinematics.
@@ -1439,32 +1466,52 @@ public:
    *  @{
    */
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other) const
   {
     return robot_model_->distance(position_, other.getVariablePositions());
   }
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other, const JointModelGroup* joint_group) const;
 
+  /** \brief Return the sum of joint distances to "other" state. Only considers active joints. */
   double distance(const RobotState& other, const JointModel* joint) const
   {
     const int idx = joint->getFirstVariableIndex();
     return joint->distance(position_ + idx, other.position_ + idx);
   }
 
-  /** \brief Interpolate from this state towards state \e to, at time \e t in [0,1].
-      The result is stored in \e state, mimic joints are correctly updated and flags are set
-      so that FK is recomputed when needed. */
+  /**
+   * Interpolate towards "to" state. Mimic joints are correctly updated and flags are set so that FK is recomputed
+   * when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   */
   void interpolate(const RobotState& to, double t, RobotState& state) const;
 
-  /** \brief Interpolate from this state towards \e to, at time \e t in [0,1], but only for the joints in the
-      specified group. If mimic joints need to be updated, they are updated accordingly. Flags are set so that FK
-      computation is triggered when needed. */
+  /**
+   * Interpolate towards "to" state, but only for the joints in the specified group. Mimic joints are correctly updated
+   * and flags are set so that FK is recomputed when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   * @param joint_group interpolate only for the joints in this group
+   */
   void interpolate(const RobotState& to, double t, RobotState& state, const JointModelGroup* joint_group) const;
 
-  /** \brief Update \e state by interpolating form this state towards \e to, at time \e t in [0,1] but only for
-      the joint \e joint. If there are joints that mimic this joint, they are updated. Flags are set so that
-      FK computation is triggered as needed. */
+  /**
+   * Interpolate towards "to" state, but only for a single joint. Mimic joints are correctly updated
+   * and flags are set so that FK is recomputed when needed.
+   *
+   * @param to interpolate to this state
+   * @param t a fraction in the range [0 1]. If 1, the result matches "to" state exactly.
+   * @param state holds the result
+   * @param joint interpolate only for this joint
+   */
   void interpolate(const RobotState& to, double t, RobotState& state, const JointModel* joint) const
   {
     const int idx = joint->getFirstVariableIndex();
@@ -1751,6 +1798,22 @@ public:
   void printDirtyInfo(std::ostream& out = std::cout) const;
 
   std::string getStateTreeString(const std::string& prefix = "") const;
+
+  /**
+   * \brief Transform pose from the robot model's base frame to the reference frame of the IK solver
+   * @param pose - the input to change
+   * @param solver - a kin solver whose base frame is important to us
+   * @return true if no error
+   */
+  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const kinematics::KinematicsBaseConstPtr& solver);
+
+  /**
+   * \brief Transform pose from the robot model's base frame to the reference frame of the IK solver
+   * @param pose - the input to change
+   * @param ik_frame - the name of frame of reference of base of ik solver
+   * @return true if no error
+   */
+  bool setToIKSolverFrame(Eigen::Isometry3d& pose, const std::string& ik_frame);
 
 private:
   void allocMemory();
